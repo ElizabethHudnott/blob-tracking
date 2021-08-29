@@ -1,10 +1,10 @@
 const video = document.getElementById('webcam');
 const canvas = document.getElementById('canvas');
 const context = canvas.getContext('2d');
-let targetRed = 0, targetGreen = 0, targetBlue = 0;
+let targetRed = 0, targetGreen = 0, targetBlue = 0, targetBrightness = 0;
 let sampleSize = 1;
 let lastUpdate = 0;
-let colorThreshold = 50;
+let colorThreshold = 0.1, brightnessThreshold = 100;
 let width, height, numBytes, updatePeriod;
 
 function showWebcam(time) {
@@ -16,11 +16,20 @@ function showWebcam(time) {
 	const imageData = context.getImageData(0, 0, width, height);
 	const pixels = imageData.data;
 	for (let i = 0; i < numBytes; i += 4) {
-		const redDiff = Math.abs(pixels[i] - targetRed);
-		const greenDiff = Math.abs(pixels[i + 1] - targetGreen);
-		const blueDiff = Math.abs(pixels[i + 2] - targetBlue);
+		let red = pixels[i];
+		let green = pixels[i + 1];
+		let blue = pixels[i + 2];
+		const brightness = red + green + blue;
+		const max = Math.max(red, green, blue);
+		red /= max;
+		green /= max;
+		blue /= max;
+		const redDiff = Math.abs(red - targetRed);
+		const greenDiff = Math.abs(green - targetGreen);
+		const blueDiff = Math.abs(blue - targetBlue);
+		const brightnessDiff = Math.abs(brightness - targetBrightness);
 		const diff = redDiff + greenDiff + blueDiff;
-		if (diff <= colorThreshold) {
+		if (diff <= colorThreshold && brightnessDiff <= brightnessThreshold) {
 			pixels[i] = 255;
 			pixels[i + 1] = 0;
 			pixels[i + 2] = 255;
@@ -68,7 +77,12 @@ canvas.addEventListener('click', function (event) {
 		green += pixels[i + 1];
 		blue += pixels[i + 2];
 	}
-	targetRed = red / numPixels;
-	targetGreen = green / numPixels;
-	targetBlue = blue / numPixels;
+	red = red / numPixels;
+	green = green / numPixels;
+	blue = blue / numPixels;
+	const max = Math.max(red, green, blue);
+	targetRed = red / max;
+	targetGreen = green / max;
+	targetBlue = blue / max;
+	targetBrightness = red + green + blue;
 });
