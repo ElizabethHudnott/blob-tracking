@@ -118,9 +118,8 @@ function rgbToHCL(red, green, blue) {
 		hue += 6;
 	}
 	hue /= 3;
-	const chroma = max - min;
 	const lightness = 0.212 * red + 0.701 * green + 0.087 * blue;
-	return [hue, chroma, lightness];
+	return [hue, delta, lightness];
 }
 
 canvas.addEventListener('contextmenu', function (event) {
