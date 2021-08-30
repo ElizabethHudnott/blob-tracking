@@ -4,15 +4,13 @@ const video = document.getElementById('webcam');
 const canvas = document.getElementById('canvas');
 const context = canvas.getContext('2d');
 let targetColor = [0, 0, 0];
-let sampleSize = 1;
+let sampleSize = 2;
 let lastUpdate = 0;
 let hueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
 let chromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
 let lightnessThreshold = parseFloat(document.getElementById('lightness-threshold').value) / 2550;
-let totalThreshold;
-calcTotalThreshold();
 let width, height, numBytes, updatePeriod;
-let drawOverlay = true;
+let trackBlobs = false;
 
 function showWebcam(time) {
 	requestAnimationFrame(showWebcam);
@@ -20,7 +18,7 @@ function showWebcam(time) {
 		return;
 	}
 	context.drawImage(video, 0, 0);
-	if (!drawOverlay) {
+	if (!trackBlobs) {
 		return;
 	}
 	const imageData = context.getImageData(0, 0, width, height);
@@ -30,16 +28,20 @@ function showWebcam(time) {
 		const green = pixels[i + 1];
 		const blue = pixels[i + 2];
 		const hcl = rgbToHCL(red, green, blue);
-		let hueDiff = Math.abs(hcl[0] - targetColor[0]);
-		if (hueDiff > 0.5) {
-			hueDiff = 1 - hueDiff;
+		let hueDiff;
+		if (hcl[1] === 0 || targetColor[1] === 0) {
+			hueDiff = 0;
+		} else {
+			hueDiff = Math.abs(hcl[0] - targetColor[0]);
+			if (hueDiff > 0.5) {
+				hueDiff = 1 - hueDiff;
+			}
 		}
 		const chromaDiff = Math.abs(hcl[1] - targetColor[1]);
 		const lightnessDiff = Math.abs(hcl[2] - targetColor[2]);
 		if (
 			hueDiff <= hueThreshold && chromaDiff <= chromaThreshold &&
-			lightnessDiff <= lightnessThreshold &&
-			hueDiff * hueDiff + chromaDiff * chromaDiff + lightnessDiff * lightnessDiff <= totalThreshold
+			lightnessDiff <= lightnessThreshold
 		) {
 			pixels[i] = 0;
 			pixels[i + 1] = 0;
@@ -70,10 +72,10 @@ navigator.mediaDevices.getUserMedia({
 
 canvas.addEventListener('pointerdown', function (event) {
 	if (event.button === 2) {
-		drawOverlay = false;
+		trackBlobs = false;
 		return;
 	}
-	drawOverlay = true;
+	trackBlobs = true;
 	const x = Math.round(event.offsetX);
 	const y = Math.round(event.offsetY);
 	const minX = Math.max(x - sampleSize, 0);
@@ -118,7 +120,7 @@ function rgbToHCL(red, green, blue) {
 	if (hue < 0) {
 		hue += 6;
 	}
-	hue /= 3;
+	hue /= 6;
 	const lightness = 0.212 * red + 0.701 * green + 0.087 * blue;
 	return [hue, delta, lightness];
 }
@@ -128,29 +130,13 @@ canvas.addEventListener('contextmenu', function (event) {
 });
 
 document.getElementById('hue-threshold').addEventListener('input', function (event) {
-	hueThreshold = parseFloat(this.value) / 510;
-	calcTotalThreshold();
+	hueThreshold = parseFloat(this.value) / 1530;
 });
 
 document.getElementById('chroma-threshold').addEventListener('input', function (event) {
 	chromaThreshold = parseFloat(this.value) / 255;
-	calcTotalThreshold();
 });
 
 document.getElementById('lightness-threshold').addEventListener('input', function (event) {
 	lightnessThreshold = parseFloat(this.value) / 2550;
-	calcTotalThreshold();
 });
-
-document.getElementById('total-threshold').addEventListener('input', function (event) {
-	calcTotalThreshold();
-});
-
-function calcTotalThreshold() {
-	const fraction = parseFloat(document.getElementById('total-threshold').value) / 1202;
-	const maxValue = Math.max(hueThreshold, chromaThreshold, lightnessThreshold);
-	const maxDistance = Math.hypot(hueThreshold, chromaThreshold, lightnessThreshold);
-	const range = maxDistance - maxValue;
-	const value = maxValue + fraction * range;
-	totalThreshold = value * value;
-}
