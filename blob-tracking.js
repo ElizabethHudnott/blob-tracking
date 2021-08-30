@@ -1,44 +1,53 @@
+'use strict';
+
 const video = document.getElementById('webcam');
 const canvas = document.getElementById('canvas');
 const context = canvas.getContext('2d');
-let targetRed = 0, targetGreen = 0, targetBlue = 0, targetBrightness = 0;
+let targetColor = [0, 0, 0];
 let sampleSize = 1;
 let lastUpdate = 0;
-let colorThreshold = 0.1, brightnessThreshold = 100;
+let hueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
+let chromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
+let lightnessThreshold = parseFloat(document.getElementById('lightness-threshold').value) / 2550;
+let totalThreshold = parseFloat(document.getElementById('total-threshold').value) / 2550;
+totalThreshold *= totalThreshold;
 let width, height, numBytes, updatePeriod;
+let drawOverlay = true;
 
 function showWebcam(time) {
+	requestAnimationFrame(showWebcam);
 	if (time - lastUpdate < updatePeriod) {
-		requestAnimationFrame(showWebcam);
 		return;
 	}
 	context.drawImage(video, 0, 0);
+	if (!drawOverlay) {
+		return;
+	}
 	const imageData = context.getImageData(0, 0, width, height);
 	const pixels = imageData.data;
 	for (let i = 0; i < numBytes; i += 4) {
-		let red = pixels[i];
-		let green = pixels[i + 1];
-		let blue = pixels[i + 2];
-		const brightness = red + green + blue;
-		const max = Math.max(red, green, blue);
-		red /= max;
-		green /= max;
-		blue /= max;
-		const redDiff = Math.abs(red - targetRed);
-		const greenDiff = Math.abs(green - targetGreen);
-		const blueDiff = Math.abs(blue - targetBlue);
-		const brightnessDiff = Math.abs(brightness - targetBrightness);
-		const diff = redDiff + greenDiff + blueDiff;
-		if (diff <= colorThreshold && brightnessDiff <= brightnessThreshold) {
-			pixels[i] = 255;
+		const red = pixels[i];
+		const green = pixels[i + 1];
+		const blue = pixels[i + 2];
+		const hcl = rgbToHCL(red, green, blue);
+		let hueDiff = Math.abs(hcl[0] - targetColor[0]);
+		if (hueDiff > 0.5) {
+			hueDiff = 1 - hueDiff;
+		}
+		const chromaDiff = Math.abs(hcl[1] - targetColor[1]);
+		const lightnessDiff = Math.abs(hcl[2] - targetColor[2]);
+		if (
+			hueDiff <= hueThreshold && chromaDiff <= chromaThreshold &&
+			lightnessDiff <= lightnessThreshold &&
+			hueDiff * hueDiff + chromaDiff * chromaDiff + lightnessDiff * lightnessDiff <= totalThreshold
+		) {
+			pixels[i] = 0;
 			pixels[i + 1] = 0;
-			pixels[i + 2] = 255;
+			pixels[i + 2] = 0;
 		}
 	}
 	context.putImageData(imageData, 0, 0);
-
 	lastUpdate = time;
-	requestAnimationFrame(showWebcam);
 }
 
 navigator.mediaDevices.getUserMedia({
@@ -59,7 +68,12 @@ navigator.mediaDevices.getUserMedia({
 	console.error(error);
 });
 
-canvas.addEventListener('click', function (event) {
+canvas.addEventListener('pointerdown', function (event) {
+	if (event.button === 2) {
+		drawOverlay = false;
+		return;
+	}
+	drawOverlay = true;
 	const x = Math.round(event.offsetX);
 	const y = Math.round(event.offsetY);
 	const minX = Math.max(x - sampleSize, 0);
@@ -80,9 +94,52 @@ canvas.addEventListener('click', function (event) {
 	red = red / numPixels;
 	green = green / numPixels;
 	blue = blue / numPixels;
+	targetColor = rgbToHCL(red, green, blue);
+});
+
+function rgbToHCL(red, green, blue) {
+	red /= 255;
+	green /= 255;
+	blue /= 255;
 	const max = Math.max(red, green, blue);
-	targetRed = red / max;
-	targetGreen = green / max;
-	targetBlue = blue / max;
-	targetBrightness = red + green + blue;
+	const min = Math.min(red, green, blue);
+	const delta = max - min;
+	let hue;
+	if (delta === 0) {
+		hue = 0;
+	} else if (max === red) {
+		hue = ((green - blue) / delta) % 6;
+	} else if (max === green) {
+		hue = (blue - red) / delta + 2;
+	} else {
+		hue = (red - green) / delta + 4;
+	}
+	if (hue < 0) {
+		hue += 6;
+	}
+	hue /= 3;
+	const chroma = max - min;
+	const lightness = 0.212 * red + 0.701 * green + 0.087 * blue;
+	return [hue, chroma, lightness];
+}
+
+canvas.addEventListener('contextmenu', function (event) {
+	event.preventDefault();
+});
+
+document.getElementById('hue-threshold').addEventListener('input', function (event) {
+	hueThreshold = parseFloat(this.value) / 510;
+});
+
+document.getElementById('chroma-threshold').addEventListener('input', function (event) {
+	chromaThreshold = parseFloat(this.value) / 255;
+});
+
+document.getElementById('lightness-threshold').addEventListener('input', function (event) {
+	lightnessThreshold = parseFloat(this.value) / 2550;
+});
+
+document.getElementById('total-threshold').addEventListener('input', function (event) {
+	totalThreshold = parseFloat(this.value) / 2550;
+	totalThreshold *= totalThreshold;
 });
