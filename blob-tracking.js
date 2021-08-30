@@ -9,8 +9,8 @@ let lastUpdate = 0;
 let hueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
 let chromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
 let lightnessThreshold = parseFloat(document.getElementById('lightness-threshold').value) / 2550;
-let totalThreshold = parseFloat(document.getElementById('total-threshold').value) / 2550;
-totalThreshold *= totalThreshold;
+let totalThreshold;
+calcTotalThreshold();
 let width, height, numBytes, updatePeriod;
 let drawOverlay = true;
 
@@ -84,8 +84,9 @@ canvas.addEventListener('pointerdown', function (event) {
 	const sampleHeight = maxY - minY;
 	const numPixels = sampleWidth * sampleHeight;
 	const numSampleBytes = numPixels * 4;
-	const pixels = context.getImageData(minX, minY, sampleWidth, sampleHeight).data;
 	let red = 0, green = 0, blue = 0;
+	context.drawImage(video, 0, 0);
+	const pixels = context.getImageData(minX, minY, sampleWidth, sampleHeight).data;
 	for (let i = 0; i < numSampleBytes; i += 4) {
 		red += pixels[i];
 		green += pixels[i + 1];
@@ -128,17 +129,28 @@ canvas.addEventListener('contextmenu', function (event) {
 
 document.getElementById('hue-threshold').addEventListener('input', function (event) {
 	hueThreshold = parseFloat(this.value) / 510;
+	calcTotalThreshold();
 });
 
 document.getElementById('chroma-threshold').addEventListener('input', function (event) {
 	chromaThreshold = parseFloat(this.value) / 255;
+	calcTotalThreshold();
 });
 
 document.getElementById('lightness-threshold').addEventListener('input', function (event) {
 	lightnessThreshold = parseFloat(this.value) / 2550;
+	calcTotalThreshold();
 });
 
 document.getElementById('total-threshold').addEventListener('input', function (event) {
-	totalThreshold = parseFloat(this.value) / 2550;
-	totalThreshold *= totalThreshold;
+	calcTotalThreshold();
 });
+
+function calcTotalThreshold() {
+	const fraction = parseFloat(document.getElementById('total-threshold').value) / 1202;
+	const maxValue = Math.max(hueThreshold, chromaThreshold, lightnessThreshold);
+	const maxDistance = Math.hypot(hueThreshold, chromaThreshold, lightnessThreshold);
+	const range = maxDistance - maxValue;
+	const value = maxValue + fraction * range;
+	totalThreshold = value * value;
+}
