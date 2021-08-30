@@ -1,54 +1,64 @@
 'use strict';
 
 const video = document.getElementById('webcam');
-const canvas = document.getElementById('canvas');
-const context = canvas.getContext('2d');
+const camCanvas = document.getElementById('cam-canvas');
+const motionCanvas = document.getElementById('motion-canvas');
+const camContext = camCanvas.getContext('2d');
+const motionContext = motionCanvas.getContext('2d');
 let targetColor = [0, 0, 0];
 let sampleSize = 2;
 let lastUpdate = 0;
 let hueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
 let chromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
 let lightnessThreshold = parseFloat(document.getElementById('lightness-threshold').value) / 2550;
-let width, height, numBytes, updatePeriod;
+let motionThreshold = 0.01;
+let width, height, numBytes, updatePeriod, previousPixels;
 let trackBlobs = false;
+let showColorOverlay = true;
 
 function showWebcam(time) {
 	requestAnimationFrame(showWebcam);
 	if (time - lastUpdate < updatePeriod) {
 		return;
 	}
-	context.drawImage(video, 0, 0);
+	camContext.drawImage(video, 0, 0);
 	if (!trackBlobs) {
 		return;
 	}
-	const imageData = context.getImageData(0, 0, width, height);
+	const imageData = camContext.getImageData(0, 0, width, height);
 	const pixels = imageData.data;
+	const currentPixels = showColorOverlay ? pixels.slice() : pixels;
+	const motionData = motionContext.createImageData(width, height);
+	const motionPixels = motionData.data;
 	for (let i = 0; i < numBytes; i += 4) {
-		const red = pixels[i];
-		const green = pixels[i + 1];
-		const blue = pixels[i + 2];
-		const hcl = rgbToHCL(red, green, blue);
-		let hueDiff;
-		if (hcl[1] === 0 || targetColor[1] === 0) {
-			hueDiff = 0;
-		} else {
-			hueDiff = Math.abs(hcl[0] - targetColor[0]);
-			if (hueDiff > 0.5) {
-				hueDiff = 1 - hueDiff;
+		let red = pixels[i];
+		let green = pixels[i + 1];
+		let blue = pixels[i + 2];
+		let hcl = rgbToHCL(red, green, blue);
+		let colorVector = colorDifference(hcl, targetColor);
+		const colorMatch = colorVector[0] <= hueThreshold && colorVector[1] <= chromaThreshold && colorVector[2] <= lightnessThreshold;
+
+		red = previousPixels[i];
+		green = previousPixels[i + 1];
+		blue = previousPixels[i + 2];
+		const previousColor = rgbToHCL(red, green, blue);
+		colorVector = colorDifference(hcl, previousColor);
+		const motionMatch = colorVector[0] * colorVector[0] + colorVector[1] * colorVector[1] + colorVector[2] * colorVector[2] >= motionThreshold;
+
+		if (colorMatch) {
+			if (showColorOverlay) {
+				pixels[i] = 0;
+				pixels[i + 1] = 0;
+				pixels[i + 2] = 0;
 			}
 		}
-		const chromaDiff = Math.abs(hcl[1] - targetColor[1]);
-		const lightnessDiff = Math.abs(hcl[2] - targetColor[2]);
-		if (
-			hueDiff <= hueThreshold && chromaDiff <= chromaThreshold &&
-			lightnessDiff <= lightnessThreshold
-		) {
-			pixels[i] = 0;
-			pixels[i + 1] = 0;
-			pixels[i + 2] = 0;
-		}
+		motionPixels[i + 3] = motionMatch ? 0 : 255;	// Set alpha
 	}
-	context.putImageData(imageData, 0, 0);
+	if (showColorOverlay) {
+		camContext.putImageData(imageData, 0, 0);
+	}
+	motionContext.putImageData(motionData, 0, 0);
+	previousPixels = currentPixels;
 	lastUpdate = time;
 }
 
@@ -62,15 +72,18 @@ navigator.mediaDevices.getUserMedia({
 	height = info.height;
 	numBytes = width * height * 4;
 	updatePeriod = 1000 / info.frameRate;
-	canvas.width = width;
-	canvas.height = height;
+	camCanvas.width = width;
+	camCanvas.height = height;
+	motionCanvas.width = width;
+	motionCanvas.height = height;
+	previousPixels = new Uint8ClampedArray(numBytes);
 	requestAnimationFrame(showWebcam);
 })
 .catch(function (error) {
 	console.error(error);
 });
 
-canvas.addEventListener('pointerdown', function (event) {
+camCanvas.addEventListener('pointerdown', function (event) {
 	if (event.button === 2) {
 		trackBlobs = false;
 		return;
@@ -87,8 +100,8 @@ canvas.addEventListener('pointerdown', function (event) {
 	const numPixels = sampleWidth * sampleHeight;
 	const numSampleBytes = numPixels * 4;
 	let red = 0, green = 0, blue = 0;
-	context.drawImage(video, 0, 0);
-	const pixels = context.getImageData(minX, minY, sampleWidth, sampleHeight).data;
+	camContext.drawImage(video, 0, 0);
+	const pixels = camContext.getImageData(minX, minY, sampleWidth, sampleHeight).data;
 	for (let i = 0; i < numSampleBytes; i += 4) {
 		red += pixels[i];
 		green += pixels[i + 1];
@@ -125,7 +138,22 @@ function rgbToHCL(red, green, blue) {
 	return [hue, delta, lightness];
 }
 
-canvas.addEventListener('contextmenu', function (event) {
+function colorDifference(color1, color2) {
+	let hueDiff;
+	if (color1[1] === 0 || color2[1] === 0) {
+		hueDiff = 0;
+	} else {
+		hueDiff = Math.abs(color1[0] - color2[0]);
+		if (hueDiff > 0.5) {
+			hueDiff = 1 - hueDiff;
+		}
+	}
+	const chromaDiff = Math.abs(color1[1] - color2[1]);
+	const lightnessDiff = Math.abs(color1[2] - color2[2]);
+	return [hueDiff, chromaDiff, lightnessDiff];
+}
+
+camCanvas.addEventListener('contextmenu', function (event) {
 	event.preventDefault();
 });
 
