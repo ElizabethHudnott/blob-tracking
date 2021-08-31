@@ -10,18 +10,27 @@
 	</style>
 </head>
 <body>
+	<video id="webcam" autoplay hidden></video>
+	<canvas id="canvas"></canvas>
 	<table>
 		<tr>
+			<td>Display</td>
 			<td>
-				<video id="webcam" autoplay hidden></video>
-				<canvas id="cam-canvas"></canvas>
-			</td>
-			<td>
-				<canvas id="motion-canvas"></canvas>
+				<select id="camera-display">
+					<option value="1">Camera</option>
+					<option value="2">Colour Key</option>
+					<option value="3">Blobs</option>
+					<option value="4">Motion Tracker</option>
+				</select>
+				<button type="button" id="camera-activation">Start</button>
 			</td>
 		</tr>
-	</table>
-	<table>
+		<tr>
+			<td>Key Colour</td>
+			<td>
+				<input type="color" id="color-keying" value="#000000">
+			</td>
+		</tr>
 		<tr>
 			<td>Hue</td>
 			<td>
