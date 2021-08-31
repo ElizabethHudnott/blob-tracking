@@ -40,6 +40,7 @@ let hueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 
 let chromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
 let lightnessThreshold = parseFloat(document.getElementById('lightness-threshold').value) / 765;
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
+let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
 motionThreshold *= motionThreshold;
 let videoTrack, width, height, numBytes, updatePeriod, animID, displayData, previousPixels;
 
@@ -82,7 +83,7 @@ function showWebcam(time) {
 		blue = previousPixels[i + 2];
 		const previousColor = rgbToHCL(red, green, blue);
 		colorVector = colorDifference(hcl, previousColor);
-		const motionMatch = 0 * colorVector[0] * colorVector[0] + colorVector[1] * colorVector[1] + colorVector[2] * colorVector[2] >= motionThreshold;
+		const motionMatch = hueMotionWeight * colorVector[0] * colorVector[0] + colorVector[1] * colorVector[1] + colorVector[2] * colorVector[2] >= motionThreshold;
 
 		if (colorMatch) {
 			if (display === Display.COLOR_KEY) {
@@ -175,32 +176,6 @@ canvas.addEventListener('pointerdown', function (event) {
 	targetColor = rgbToHCL(red, green, blue);
 });
 
-/**
- * @return {number} Hue in range 0..6
- */
-function hue(red, green, blue) {
-	red /= 255;
-	green /= 255;
-	blue /= 255;
-	const max = Math.max(red, green, blue);
-	const min = Math.min(red, green, blue);
-	const delta = max - min;
-	let hue;
-	if (delta === 0) {
-		hue = 0;
-	} else if (max === red) {
-		hue = ((green - blue) / delta) % 6;
-	} else if (max === green) {
-		hue = (blue - red) / delta + 2;
-	} else {
-		hue = (red - green) / delta + 4;
-	}
-	if (hue < 0) {
-		hue += 6;
-	}
-	return hue;
-}
-
 function rgbToHCL(red, green, blue) {
 	red /= 255;
 	green /= 255;
@@ -264,6 +239,13 @@ document.getElementById('motion-threshold').addEventListener('input', function (
 	}
 });
 
+document.getElementById('motion-hue-weight').addEventListener('input', function (event) {
+	const value = parseFloat(this.value);
+	if (value >= 0) {
+		hueMotionWeight = value;
+	}
+});
+
 displaySelector.addEventListener('input', function (event) {
 	display = parseInt(this.value);
 	switch (display) {
@@ -292,4 +274,4 @@ document.getElementById('color-keying').addEventListener('input', function (even
 	keyColor[2] = parseInt(value.substr(5, 2), 16);
 });
 
-document.addEventListener('visibilitychange', stopCam);
+window.addEventListener('blur', stopCam);

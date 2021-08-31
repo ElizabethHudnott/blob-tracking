@@ -33,27 +33,32 @@
 		</tr>
 		<tr>
 			<td>Hue</td>
-			<td>
+			<td colspan="3">
 				<input type="range" min="0" max="765" value="382" id="hue-threshold" class="form-control-range">
 			</td>
 		</tr>
 		<tr>
 			<td>Chroma</td>
-			<td>
+			<td colspan="3">
 				<input type="range" min="0" max="255" value="128" id="chroma-threshold" class="form-control-range">
 			</td>
 		</tr>
 		<tr>
 			<td>Lightness</td>
-			<td>
+			<td colspan="3">
 				<input type="range" min="0" max="765" value="382" id="lightness-threshold" class="form-control-range">
 			</td>
 		</tr>
 		<tr>
 			<td>Motion Threshold</td>
 			<td>
-				<input type="number" min="0.01" max="1.73" step="0.01" value="0.3" id="motion-threshold">
+				<input type="number" min="0.01" max="1.73" step="0.01" value="0.2" id="motion-threshold">
 			</td>
+			<td>Hue Weight</td>
+			<td>
+				<input type="number" min="0" max="1" step="0.05" value="0.15" id="motion-hue-weight">
+			</td>
+		</tr>
 	</table>
 </body>
 </html>
