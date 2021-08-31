@@ -12,8 +12,8 @@ let sampleSize = 1;
 let lastUpdate = 0;
 let hueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
 let chromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
-let lightnessThreshold = parseFloat(document.getElementById('lightness-threshold').value) / 2550;
-let motionThreshold = 0.01;
+let lightnessThreshold = parseFloat(document.getElementById('lightness-threshold').value) / 765;
+let motionThreshold = 0.1;
 let videoTrack, width, height, numBytes, updatePeriod, animID, previousPixels;
 
 const Display = Object.freeze({
@@ -58,7 +58,7 @@ function showWebcam(time) {
 		blue = previousPixels[i + 2];
 		const previousColor = rgbToHCL(red, green, blue);
 		colorVector = colorDifference(hcl, previousColor);
-		const motionMatch = colorVector[0] * colorVector[0] + colorVector[1] * colorVector[1] + colorVector[2] * colorVector[2] >= motionThreshold;
+		const motionMatch = 4 * colorVector[0] * colorVector[0] + colorVector[1] * colorVector[1] + colorVector[2] * colorVector[2] >= motionThreshold;
 
 		if (colorMatch) {
 			if (display === Display.COLOR_KEY) {
@@ -172,7 +172,7 @@ function rgbToHCL(red, green, blue) {
 		hue += 6;
 	}
 	hue /= 6;
-	const lightness = 0.212 * red + 0.701 * green + 0.087 * blue;
+	const lightness = (red + green + blue) / 3;
 	return [hue, delta, lightness];
 }
 
@@ -204,7 +204,7 @@ document.getElementById('chroma-threshold').addEventListener('input', function (
 });
 
 document.getElementById('lightness-threshold').addEventListener('input', function (event) {
-	lightnessThreshold = parseFloat(this.value) / 2550;
+	lightnessThreshold = parseFloat(this.value) / 765;
 });
 
 displaySelector.addEventListener('input', function (event) {
