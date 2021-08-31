@@ -1,5 +1,31 @@
 'use strict';
 
+class BlobShape {
+	constructor(x, y) {
+		this.left = x;
+		this.right = x;
+		this.top = y;
+		this.bottom = y;
+		this.xCoords = [x];
+		this.yCoords = [y];
+	}
+
+	test(x, y) {
+		const inside =
+			x >= this.left - blobDistance &&
+			x <= this.right + blobDistance &&
+			y >= this.top - blobDistance &&
+			y <= this.bottom + blobDistance;
+		return inside;
+	}
+
+	add(x, y) {
+		this.xCoords.push(x);
+		this.yCoords.push(y);
+	}
+
+}
+
 const video = document.getElementById('webcam');
 const canvas = document.getElementById('canvas');
 const context = canvas.getContext('2d');
@@ -13,8 +39,9 @@ let lastUpdate = 0;
 let hueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
 let chromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
 let lightnessThreshold = parseFloat(document.getElementById('lightness-threshold').value) / 765;
-let motionThreshold = 0.1;
-let videoTrack, width, height, numBytes, updatePeriod, animID, previousPixels;
+let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
+motionThreshold *= motionThreshold;
+let videoTrack, width, height, numBytes, updatePeriod, animID, displayData, previousPixels;
 
 const Display = Object.freeze({
 	OFF: 0,
@@ -32,10 +59,7 @@ function showWebcam(time) {
 	if (time - lastUpdate < updatePeriod) {
 		return;
 	}
-	let displayData;
-	if (display === Display.MOTION_TRACKER) {
-		displayData = context.createImageData(width, height);
-	} else {
+	if (display !== Display.MOTION_TRACKER) {
 		context.drawImage(video, 0, 0);
 		displayData = context.getImageData(0, 0, width, height);
 	}
@@ -58,7 +82,7 @@ function showWebcam(time) {
 		blue = previousPixels[i + 2];
 		const previousColor = rgbToHCL(red, green, blue);
 		colorVector = colorDifference(hcl, previousColor);
-		const motionMatch = 4 * colorVector[0] * colorVector[0] + colorVector[1] * colorVector[1] + colorVector[2] * colorVector[2] >= motionThreshold;
+		const motionMatch = 0 * colorVector[0] * colorVector[0] + colorVector[1] * colorVector[1] + colorVector[2] * colorVector[2] >= motionThreshold;
 
 		if (colorMatch) {
 			if (display === Display.COLOR_KEY) {
@@ -151,6 +175,32 @@ canvas.addEventListener('pointerdown', function (event) {
 	targetColor = rgbToHCL(red, green, blue);
 });
 
+/**
+ * @return {number} Hue in range 0..6
+ */
+function hue(red, green, blue) {
+	red /= 255;
+	green /= 255;
+	blue /= 255;
+	const max = Math.max(red, green, blue);
+	const min = Math.min(red, green, blue);
+	const delta = max - min;
+	let hue;
+	if (delta === 0) {
+		hue = 0;
+	} else if (max === red) {
+		hue = ((green - blue) / delta) % 6;
+	} else if (max === green) {
+		hue = (blue - red) / delta + 2;
+	} else {
+		hue = (red - green) / delta + 4;
+	}
+	if (hue < 0) {
+		hue += 6;
+	}
+	return hue;
+}
+
 function rgbToHCL(red, green, blue) {
 	red /= 255;
 	green /= 255;
@@ -207,10 +257,23 @@ document.getElementById('lightness-threshold').addEventListener('input', functio
 	lightnessThreshold = parseFloat(this.value) / 765;
 });
 
+document.getElementById('motion-threshold').addEventListener('input', function (event) {
+	let value = parseFloat(this.value);
+	if (value > 0) {
+		motionThreshold = value * value;
+	}
+});
+
 displaySelector.addEventListener('input', function (event) {
 	display = parseInt(this.value);
-	if (display === Display.COLOR_KEY || display === Display.BLOBS) {
+	switch (display) {
+	case Display.COLOR_KEY:
+	case Display.BLOBS:
 		lastDisplay = display;
+		break;
+	case Display.MOTION_TRACKER:
+		displayData.data.fill(0);
+		break;
 	}
 });
 
@@ -228,3 +291,5 @@ document.getElementById('color-keying').addEventListener('input', function (even
 	keyColor[1] = parseInt(value.substr(3, 2), 16);
 	keyColor[2] = parseInt(value.substr(5, 2), 16);
 });
+
+document.addEventListener('visibilitychange', stopCam);
