@@ -1,5 +1,7 @@
 'use strict';
 
+const TWO_PI = 2 * Math.PI;
+
 function compareNumbers(a, b) {
 	return a - b;
 }
@@ -16,14 +18,21 @@ class BlobShape {
 
 	test(x, y) {
 		const inside =
+			y <= this.bottom + blobDistance &&
 			x >= this.left - blobDistance &&
-			x <= this.right + blobDistance &&
-			y >= this.top - blobDistance &&
-			y <= this.bottom + blobDistance;
+			x <= this.right + blobDistance
 		return inside;
 	}
 
 	add(x, y) {
+		if (x < this.left) {
+			this.left = x;
+		} else if (x > this.right) {
+			this.right = x;
+		}
+		if (y > this.bottom) {
+			this.bottom = y;
+		}
 		this.xCoords.push(x);
 		this.yCoords.push(y);
 	}
@@ -39,6 +48,14 @@ class BlobShape {
 		return [this.xCoords[index], this.yCoords[index]];
 	}
 
+	get width() {
+		return this.right - this.left + 1;
+	}
+
+	get height() {
+		return this.bottom - this.top + 1;
+	}
+
 }
 
 const video = document.getElementById('webcam');
@@ -49,9 +66,9 @@ const offscreenContext = offscreenCanvas.getContext('2d');
 const filter = 'blur(1)';
 context.filter = filter;
 offscreenContext.filter = filter;
+context.lineWidth = 4;
 const displaySelector = document.getElementById('camera-display');
 let targetColor = [0, 0, 0];
-let keyColor = [0, 0, 0];
 let sampleSize = 1;
 let lastUpdate = 0;
 let subtractBackground = document.getElementById('subtract-background').checked;
@@ -59,10 +76,15 @@ let fgHueThreshold = parseFloat(document.getElementById('hue-threshold').value) 
 let fgChromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
 let fgIntensityThreshold = parseFloat(document.getElementById('intensity-threshold').value) / 765;
 let bgHueThreshold = 0.5, bgChromaThreshold = 1, bgIntensityThreshold = 1;
+let blobDistance = 30;
+let minPointsInBlob = 800;
+let pointSize = 8;
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
 motionThreshold *= motionThreshold;
-let videoTrack, width, height, numBytes, updatePeriod, animID, displayData, previousPixels, backgroundPixels;
+let videoTrack, width, height, bytesPerRow, numBytes, updatePeriod, animID;
+let displayData, previousPixels, backgroundPixels;
+let keyColor = [0, 0, 0];
 
 const Display = Object.freeze({
 	OFF: 0,
@@ -90,6 +112,7 @@ function showWebcam(time) {
 	const imageData = offscreenContext.getImageData(0, 0, width, height);
 	const pixels = imageData.data;
 	const displayPixels = displayData.data;
+	const blobs = [];
 
 	for (let i = 0; i < numBytes; i += 4) {
 		let red = pixels[i];
@@ -112,17 +135,32 @@ function showWebcam(time) {
 
 		if (backgroundMatch) {
 			if (display === Display.BACKGROUND_SUBTRACTION) {
-				displayPixels[i] = 0;
-				displayPixels[i + 1] = 255;
-				displayPixels[i + 2] = 0;
+				displayPixels[i] = keyColor[0];
+				displayPixels[i + 1] = keyColor[1];
+				displayPixels[i + 2] = keyColor[2];
 			}
 		} else if (colorMatch) {
+			const y = Math.trunc(i / bytesPerRow);
+			const x = (i % bytesPerRow) / 4;
+			let found = false;
+			for (let j = blobs.length - 1; j >= 0; j--) {
+				const blob = blobs[j];
+				if (blob.test(x, y)) {
+					blob.add(x, y);
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				blobs.push(new BlobShape(x, y));
+			}
 			if (display === Display.COLOR_KEY) {
 				displayPixels[i] = keyColor[0];
 				displayPixels[i + 1] = keyColor[1];
 				displayPixels[i + 2] = keyColor[2];
 			}
 		}
+
 		if (display === Display.MOTION_TRACKER) {
 			displayPixels[i + 3] = motionMatch ? 0 : 255;	// Set alpha
 		}
@@ -131,7 +169,20 @@ function showWebcam(time) {
 		previousPixels[i + 1] = hci[1] * 255;
 		previousPixels[i + 2] = hci[2] * 255;
 	}
-	context.putImageData(displayData, 0, 0);
+	if (display === Display.BLOBS) {
+		context.beginPath();
+		for (let blob of blobs) {
+			if (blob.numPoints >= minPointsInBlob) {
+				context.strokeRect(blob.left, blob.top, blob.width, blob.height);
+				const [x, y] = blob.centre;
+				context.moveTo(x, y);
+				context.arc(x, y, pointSize, 0, TWO_PI);
+			}
+		}
+		context.fill();
+	} else {
+		context.putImageData(displayData, 0, 0);
+	}
 	lastUpdate = time;
 }
 
@@ -145,7 +196,8 @@ async function startCam() {
 		const info = videoTrack.getSettings();
 		width = info.width;
 		height = info.height;
-		numBytes = width * height * 4;
+		bytesPerRow = width * 4;
+		numBytes = bytesPerRow * height;
 		updatePeriod = 1000 / info.frameRate;
 		canvas.width = width;
 		canvas.height = height;
@@ -158,6 +210,7 @@ async function startCam() {
 		animID = requestAnimationFrame(showWebcam);
 		display = parseInt(displaySelector.value);
 		button.innerHTML = 'Stop';
+		setKeyColor(document.getElementById('color-keying').value);
 	}  catch(error) {
 		console.error(error);
 	} finally {
@@ -169,7 +222,7 @@ startCam();
 
 function stopCam() {
 	cancelAnimationFrame(animID);
-	context.fillRect(0, 0, width, height);
+	context.clearRect(0, 0, width, height);
 	videoTrack.stop();
 	video.srcObject = null;
 	display = Display.STOPPED;
@@ -338,11 +391,16 @@ document.getElementById('camera-activation').addEventListener('click', async fun
 	}
 });
 
+function setKeyColor(hexColor) {
+	keyColor[0] = parseInt(hexColor.substr(1, 2), 16);
+	keyColor[1] = parseInt(hexColor.substr(3, 2), 16);
+	keyColor[2] = parseInt(hexColor.substr(5, 2), 16);
+	context.strokeStyle = hexColor;
+	context.fillStyle = hexColor;
+}
+
 document.getElementById('color-keying').addEventListener('input', function (event) {
-	const value = this.value;
-	keyColor[0] = parseInt(value.substr(1, 2), 16);
-	keyColor[1] = parseInt(value.substr(3, 2), 16);
-	keyColor[2] = parseInt(value.substr(5, 2), 16);
+	setKeyColor(this.value);
 });
 
 document.getElementById('subtract-background').addEventListener('input', function (event) {
