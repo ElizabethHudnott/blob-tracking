@@ -54,10 +54,11 @@ let targetColor = [0, 0, 0];
 let keyColor = [0, 0, 0];
 let sampleSize = 1;
 let lastUpdate = 0;
+let subtractBackground = document.getElementById('subtract-background').checked;
 let fgHueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
 let fgChromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
 let fgIntensityThreshold = parseFloat(document.getElementById('intensity-threshold').value) / 765;
-let bgHueThreshold = 0, bgChromaThreshold = 0, bgIntensityThreshold = 0;
+let bgHueThreshold = 0.5, bgChromaThreshold = 1, bgIntensityThreshold = 1;
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
 motionThreshold *= motionThreshold;
@@ -98,9 +99,12 @@ function showWebcam(time) {
 		let colorVector = colorDifference(hci, targetColor);
 		const colorMatch = colorVector[0] <= fgHueThreshold && colorVector[1] <= fgChromaThreshold && colorVector[2] <= fgIntensityThreshold;
 
-		const backgroundColor = [backgroundPixels[i] / 255, backgroundPixels[i + 1] / 255, backgroundPixels[i + 2] / 255];
-		colorVector = colorDifference(hci, backgroundColor);
-		const backgroundMatch = colorVector[0] <= bgHueThreshold && colorVector[1] <= bgChromaThreshold && colorVector[2] <= bgIntensityThreshold;;
+		let backgroundMatch = false;
+		if (subtractBackground) {
+			const backgroundColor = [backgroundPixels[i] / 255, backgroundPixels[i + 1] / 255, backgroundPixels[i + 2] / 255];
+			colorVector = colorDifference(hci, backgroundColor);
+			backgroundMatch = colorVector[0] <= bgHueThreshold && colorVector[1] <= bgChromaThreshold && colorVector[2] <= bgIntensityThreshold;;
+		}
 
 		const previousColor = [previousPixels[i] / 255, previousPixels[i + 1] / 255, previousPixels[i + 2] / 255];
 		colorVector = colorDifference(hci, previousColor);
@@ -148,7 +152,9 @@ async function startCam() {
 		offscreenCanvas.width = width;
 		offscreenCanvas.height = height;
 		previousPixels = new Uint8ClampedArray(numBytes);
-		backgroundPixels = new Uint8ClampedArray(numBytes);
+		if (backgroundPixels === undefined || backgroundPixels.length !== numBytes) {
+			backgroundPixels = new Uint8ClampedArray(numBytes);
+		}
 		animID = requestAnimationFrame(showWebcam);
 		display = parseInt(displaySelector.value);
 		button.innerHTML = 'Stop';
@@ -308,14 +314,19 @@ displaySelector.addEventListener('input', function (event) {
 		break;
 	}
 
+	const bgSubtractEnable = document.getElementById('subtract-background');
 	if (display === Display.BACKGROUND_SUBTRACTION) {
 		document.getElementById('hue-threshold').value = bgHueThreshold * 1530;
 		document.getElementById('chroma-threshold').value = bgChromaThreshold * 255;
 		document.getElementById('intensity-threshold').value = bgIntensityThreshold * 765;
+		bgSubtractEnable.disabled = true;
+		subtractBackground = true;
 	} else {
 		document.getElementById('hue-threshold').value = fgHueThreshold * 1530;
 		document.getElementById('chroma-threshold').value = fgChromaThreshold * 255;
 		document.getElementById('intensity-threshold').value = fgIntensityThreshold * 765;
+		bgSubtractEnable.disabled = false;
+		subtractBackground = bgSubtractEnable.checked;
 	}
 });
 
@@ -332,6 +343,10 @@ document.getElementById('color-keying').addEventListener('input', function (even
 	keyColor[0] = parseInt(value.substr(1, 2), 16);
 	keyColor[1] = parseInt(value.substr(3, 2), 16);
 	keyColor[2] = parseInt(value.substr(5, 2), 16);
+});
+
+document.getElementById('subtract-background').addEventListener('input', function (event) {
+	subtractBackground = this.checked;
 });
 
 window.addEventListener('blur', stopCam);
