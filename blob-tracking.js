@@ -1,5 +1,9 @@
 'use strict';
 
+function compareNumbers(a, b) {
+	return a - b;
+}
+
 class BlobShape {
 	constructor(x, y) {
 		this.left = x;
@@ -24,6 +28,17 @@ class BlobShape {
 		this.yCoords.push(y);
 	}
 
+	get numPoints() {
+		return this.xCoords.length;
+	}
+
+	get centre() {
+		this.xCoords.sort(compareNumbers);
+		this.yCoords.sort(compareNumbers);
+		const index = Math.trunc((this.xCoords.length - 1) / 2);
+		return [this.xCoords[index], this.yCoords[index]];
+	}
+
 }
 
 const video = document.getElementById('webcam');
@@ -31,6 +46,9 @@ const canvas = document.getElementById('canvas');
 const context = canvas.getContext('2d');
 const offscreenCanvas = document.createElement('CANVAS');
 const offscreenContext = offscreenCanvas.getContext('2d');
+const filter = 'blur(1)';
+context.filter = filter;
+offscreenContext.filter = filter;
 const displaySelector = document.getElementById('camera-display');
 let targetColor = [0, 0, 0];
 let keyColor = [0, 0, 0];
@@ -78,10 +96,7 @@ function showWebcam(time) {
 		let colorVector = colorDifference(hcl, targetColor);
 		const colorMatch = colorVector[0] <= hueThreshold && colorVector[1] <= chromaThreshold && colorVector[2] <= lightnessThreshold;
 
-		red = previousPixels[i];
-		green = previousPixels[i + 1];
-		blue = previousPixels[i + 2];
-		const previousColor = rgbToHCL(red, green, blue);
+		const previousColor = [previousPixels[i] / 255, previousPixels[i + 1] / 255, previousPixels[i + 2] / 255];
 		colorVector = colorDifference(hcl, previousColor);
 		const motionMatch = hueMotionWeight * colorVector[0] * colorVector[0] + colorVector[1] * colorVector[1] + colorVector[2] * colorVector[2] >= motionThreshold;
 
@@ -95,9 +110,12 @@ function showWebcam(time) {
 		if (display === Display.MOTION_TRACKER) {
 			displayPixels[i + 3] = motionMatch ? 0 : 255;	// Set alpha
 		}
+
+		previousPixels[i] = hcl[0] * 255;
+		previousPixels[i + 1] = hcl[1] * 255;
+		previousPixels[i + 2] = hcl[2] * 255;
 	}
 	context.putImageData(displayData, 0, 0);
-	previousPixels = pixels;
 	lastUpdate = time;
 }
 
