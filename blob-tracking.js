@@ -1,6 +1,8 @@
 'use strict';
 
 const TWO_PI = 2 * Math.PI;
+const POINT_SIZE = 7;
+const BOUNDING_BOX_PERCENT = 0.75;
 
 function compareNumbers(a, b) {
 	return a - b;
@@ -16,12 +18,15 @@ class BlobShape {
 		this.yCoords = [y];
 	}
 
-	test(x, y) {
-		const inside =
-			y <= this.bottom + blobDistance &&
-			x >= this.left - blobDistance &&
-			x <= this.right + blobDistance
-		return inside;
+	distance(x, y) {
+		const yDistance = y - this.bottom;
+		let xDistance = 0;
+		if (x < this.left) {
+			xDistance = this.left - x;
+		} else if (x > this.right) {
+			xDistance = x - this.right;
+		}
+		return Math.max(xDistance, yDistance);
 	}
 
 	add(x, y) {
@@ -41,11 +46,22 @@ class BlobShape {
 		return this.xCoords.length;
 	}
 
-	get centre() {
-		this.xCoords.sort(compareNumbers);
-		this.yCoords.sort(compareNumbers);
-		const index = Math.trunc((this.xCoords.length - 1) / 2);
-		return [this.xCoords[index], this.yCoords[index]];
+	centre() {
+		const xCoords = this.xCoords;
+		const yCoords = this.yCoords;
+		const numPoints = xCoords.length;
+		xCoords.sort(compareNumbers);
+		yCoords.sort(compareNumbers);
+
+		const lowIndex = Math.trunc(numPoints * (1 - BOUNDING_BOX_PERCENT));
+		const highIndex = Math.trunc(numPoints * BOUNDING_BOX_PERCENT);
+		this.left = xCoords[lowIndex];
+		this.right = xCoords[highIndex];
+		this.top = yCoords[lowIndex];
+		this.bottom = yCoords[highIndex];
+
+		const medianIndex = Math.trunc(numPoints / 2);
+		return [xCoords[medianIndex], yCoords[medianIndex]];
 	}
 
 	get width() {
@@ -78,7 +94,6 @@ let fgIntensityThreshold = parseFloat(document.getElementById('intensity-thresho
 let bgHueThreshold = 0.5, bgChromaThreshold = 1, bgIntensityThreshold = 1;
 let blobDistance = 30;
 let minPointsInBlob = 800;
-let pointSize = 8;
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
 motionThreshold *= motionThreshold;
@@ -142,16 +157,19 @@ function showWebcam(time) {
 		} else if (colorMatch) {
 			const y = Math.trunc(i / bytesPerRow);
 			const x = (i % bytesPerRow) / 4;
-			let found = false;
-			for (let j = blobs.length - 1; j >= 0; j--) {
+			let closestDistance = Infinity;
+			let closestIndex;
+			for (let j = 0; j < blobs.length; j++) {
 				const blob = blobs[j];
-				if (blob.test(x, y)) {
-					blob.add(x, y);
-					found = true;
-					break;
+				const distance = blob.distance(x, y)
+				if (distance < closestDistance) {
+					closestDistance = distance;
+					closestIndex = j;
 				}
 			}
-			if (!found) {
+			if (closestDistance <= blobDistance) {
+				blobs[closestIndex].add(x, y);
+			} else {
 				blobs.push(new BlobShape(x, y));
 			}
 			if (display === Display.COLOR_KEY) {
@@ -174,9 +192,9 @@ function showWebcam(time) {
 		for (let blob of blobs) {
 			if (blob.numPoints >= minPointsInBlob) {
 				context.strokeRect(blob.left, blob.top, blob.width, blob.height);
-				const [x, y] = blob.centre;
+				const [x, y] = blob.centre();
 				context.moveTo(x, y);
-				context.arc(x, y, pointSize, 0, TWO_PI);
+				context.arc(x, y, POINT_SIZE, 0, TWO_PI);
 			}
 		}
 		context.fill();
