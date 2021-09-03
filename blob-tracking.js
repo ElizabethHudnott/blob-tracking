@@ -2,7 +2,6 @@
 
 const TWO_PI = 2 * Math.PI;
 const POINT_SIZE = 7;
-const BOUNDING_BOX_PERCENT = 0.75;
 
 function compareNumbers(a, b) {
 	return a - b;
@@ -47,6 +46,7 @@ class BlobShape {
 			this.right = x;
 		} else if (y > this.bottom) {
 			this.finalizeRow();
+			this.left = x;
 			this.bottom = y;
 		}
 		this.xCoordsOnRow.push(x);
@@ -60,12 +60,11 @@ class BlobShape {
 		const ub = Math.trunc((numCoords - 1) * 0.9);
 		this.leftBoundary.push(coordsOnRow[lb]);
 		this.rightBoundary.push(coordsOnRow[ub]);
-		this.left = coordsOnRow[0];
 		this.right = coordsOnRow[numCoords - 1];
 		this.xCoordsOnRow = [];
 	}
 
-	finalizeBoundary() {
+	findComplexHull() {
 		const leftBoundary = this.leftBoundary;
 		const rightBoundary = this.rightBoundary;
 		const numRows = leftBoundary.length;
@@ -314,7 +313,7 @@ function showWebcam(time) {
 
 		for (let blob of blobs) {
 			if (blob.numPoints >= minBlobPoints) {
-				blob.finalizeBoundary();
+				blob.findComplexHull();
 				context.beginPath();
 				blob.tracePath(context);
 				context.stroke();
