@@ -46,13 +46,13 @@ class BlobShape {
 		if (y === this.top) {
 			this.right = x;
 		} else if (y > this.bottom) {
-			this._finalizeRow();
+			this.finalizeRow();
 			this.bottom = y;
 		}
 		this.xCoordsOnRow.push(x);
 	}
 
-	_finalizeRow() {
+	finalizeRow() {
 		const coordsOnRow = this.xCoordsOnRow;
 		const numCoords = coordsOnRow.length;
 		this.numPoints += numCoords;
@@ -66,7 +66,6 @@ class BlobShape {
 	}
 
 	finalizeBoundary() {
-		this._finalizeRow();
 		const leftBoundary = this.leftBoundary;
 		const rightBoundary = this.rightBoundary;
 		const numRows = leftBoundary.length;
@@ -77,6 +76,59 @@ class BlobShape {
 			points.push(new Point(rightBoundary[i], y));
 		}
 		this.hull = convexhull.makeHullPresorted(points);
+	}
+
+	merge(blob2) {
+		let canMerge = false;
+		let j = blob2.top - this.top;
+		let j2 = 0;
+		const leftPoints = this.leftBoundary;
+		const rightPoints = this.rightBoundary;
+		const leftPoints2 = blob2.leftBoundary;
+		const rightPoints2 = blob2.rightBoundary;
+		let newLeft, newRight;
+		if (j >= 0) {
+			// blob2 is lower than this blob
+			newLeft = leftPoints.slice(0, j);
+			newRight = rightPoints.slice(0, j);
+		} else {
+			// This blob is lower than blob2
+			j2 = -j;
+			j = 0;
+			newLeft = leftPoints2.slice(0, j2);
+			newRight = rightPoints2.slice(0, j2);
+		}
+		const numRows = leftPoints.length;
+		const numRows2 = leftPoints2.length;
+		do {
+			const left = leftPoints[j];
+			const left2 = leftPoints2[j2];
+			const minLeft = Math.min(left, left2);
+			const right = rightPoints[j];
+			const right2 = rightPoints2[j2];
+			const maxRight = Math.max(right, right2);
+			if (
+				(right >= left2 && left <= right2) ||
+				(right2 >= left && left2 <= right)
+			) {
+				canMerge = true;
+			}
+			newLeft.push(minLeft);
+			newRight.push(maxRight);
+			j++;
+			j2++;
+		} while (j < numRows && j2 <numRows2);
+		if (canMerge) {
+			newLeft.push(...leftPoints.slice(j));
+			newRight.push(...rightPoints.slice(j));
+			newLeft.push(...leftPoints2.slice(j2));
+			newRight.push(...rightPoints2.slice(j2));
+			this.top = Math.min(this.top, blob2.top);
+			this.leftBoundary = newLeft;
+			this.rightBoundary = newRight;
+			return true;
+		}
+		return false;
 	}
 
 	tracePath(context) {
@@ -207,20 +259,17 @@ function showWebcam(time) {
 		} else if (colorMatch) {
 			const y = Math.trunc(i / bytesPerRow);
 			const x = (i % bytesPerRow) / 4;
-			let closestDistance = Infinity;
-			let closestIndex;
+			let matched = false;
 			for (let j = 0; j < blobs.length; j++) {
 				const blob = blobs[j];
 				const dx = blob.distanceX(x);
 				const dy = blob.distanceY(y);
-				if (dx < closestDistance && dy <= 1) {
-					closestDistance = dx;
-					closestIndex = j;
+				if (dx <= blobDistanceX && dy <= 1) {
+					blobs[j].add(x, y);
+					matched = true;
 				}
 			}
-			if (closestDistance <= blobDistanceX) {
-				blobs[closestIndex].add(x, y);
-			} else {
+			if (!matched) {
 				blobs.push(new BlobShape(x, y));
 			}
 			if (display === Display.COLOR_KEY) {
@@ -239,6 +288,30 @@ function showWebcam(time) {
 		previousPixels[i + 2] = hci[2] * 255;
 	}
 	if (display === Display.BLOBS) {
+		for (let blob of blobs) {
+			blob.finalizeRow();
+		}
+		let found;
+		do {
+			let i = 0;
+			found = false;
+			while (i < blobs.length) {
+				const blob = blobs[i];
+				let j = i + 1;
+				while (j < blobs.length) {
+					const blob2 = blobs[j];
+					const merged = blob.merge(blob2);
+					if (merged) {
+						blobs.splice(j, 1);
+						found = true;
+					} else {
+						j++;
+					}
+				}
+				i++;
+			}
+		} while (found);
+
 		for (let blob of blobs) {
 			if (blob.numPoints >= minBlobPoints) {
 				blob.finalizeBoundary();
