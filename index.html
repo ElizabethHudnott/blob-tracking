@@ -53,6 +53,16 @@
 			</td>
 		</tr>
 		<tr>
+			<td>Max Point to Blob Distance</td>
+			<td>
+				<input type="number" min="1" max="99" value="20" id="blob-distance">
+			</td>
+			<td>Min Points in a Blob</td>
+			<td>
+				<input type="number" min="10" max="999990" step="50" value="800" id="min-blob-points">
+			</td>
+		</tr>
+		<tr>
 			<td>Motion Threshold</td>
 			<td>
 				<input type="number" min="0.01" max="1.73" step="0.01" value="0.2" id="motion-threshold">
@@ -81,7 +91,7 @@
 			Reduce the <b>Intensity</b> threshold. Try to expose as much as possible of the things you want to track but keep as much of the background as you can green. Do the same with the <b>Chroma</b> and <b>Hue</b> sliders.
 		</li>
 		<li>
-			Select <b>Colour Key</b> from the <b>Display</b> list.
+			Select <b>Camera</b> from the <b>Display</b> list.
 		</li>
 		<li>
 			Click on a part of the image that contains the colour of the objects that you wish to track (e.g. your skin tone).
@@ -94,6 +104,9 @@
 		</li>
 		<li>
 			Select <b>Blobs</b> from the <b>Display List</b>.
+		</li>
+		<li>
+			Alter <b>Max Point to Blob Distance</b> and <b>Min Points in a Blob</b> as needed.
 		</li>
 	</ol>
 	<ul>

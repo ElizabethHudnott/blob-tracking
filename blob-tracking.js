@@ -26,7 +26,7 @@ class BlobShape {
 		} else if (x > this.right) {
 			xDistance = x - this.right;
 		}
-		return Math.max(xDistance, yDistance);
+		return xDistance * xDistance + yDistance * yDistance;
 	}
 
 	add(x, y) {
@@ -92,8 +92,9 @@ let fgHueThreshold = parseFloat(document.getElementById('hue-threshold').value) 
 let fgChromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
 let fgIntensityThreshold = parseFloat(document.getElementById('intensity-threshold').value) / 765;
 let bgHueThreshold = 0.5, bgChromaThreshold = 1, bgIntensityThreshold = 1;
-let blobDistance = 30;
-let minPointsInBlob = 800;
+let blobDistanceSquared = parseInt(document.getElementById('blob-distance').value);
+blobDistanceSquared *= blobDistanceSquared;
+let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
 motionThreshold *= motionThreshold;
@@ -103,7 +104,7 @@ let keyColor = [0, 0, 0];
 
 const Display = Object.freeze({
 	OFF: 0,
-	CAM: 1,
+	CAMERA: 1,
 	BACKGROUND_SUBTRACTION: 2,
 	COLOR_KEY: 3,
 	BLOBS: 4,
@@ -120,6 +121,9 @@ function showWebcam(time) {
 	}
 	if (display !== Display.MOTION_TRACKER) {
 		context.drawImage(video, 0, 0);
+		if (display === Display.CAMERA) {
+			return;
+		}
 		displayData = context.getImageData(0, 0, width, height);
 	}
 	offscreenContext.drawImage(video, 0, 0);
@@ -167,7 +171,7 @@ function showWebcam(time) {
 					closestIndex = j;
 				}
 			}
-			if (closestDistance <= blobDistance) {
+			if (closestDistance <= blobDistanceSquared) {
 				blobs[closestIndex].add(x, y);
 			} else {
 				blobs.push(new BlobShape(x, y));
@@ -190,7 +194,7 @@ function showWebcam(time) {
 	if (display === Display.BLOBS) {
 		context.beginPath();
 		for (let blob of blobs) {
-			if (blob.numPoints >= minPointsInBlob) {
+			if (blob.numPoints >= minBlobPoints) {
 				context.strokeRect(blob.left, blob.top, blob.width, blob.height);
 				const [x, y] = blob.centre();
 				context.moveTo(x, y);
@@ -256,11 +260,11 @@ canvas.addEventListener('pointerdown', function (event) {
 		return;
 	}
 	if (event.button === 2) {
-		display = Display.CAM;
-		displaySelector.value = Display.CAM;
+		display = Display.CAMERA;
+		displaySelector.value = Display.CAMERA;
 		return;
 	}
-	if (display === Display.CAM) {
+	if (display === Display.CAMERA) {
 		display = lastDisplay;
 		displaySelector.value = lastDisplay;
 	}
@@ -356,6 +360,20 @@ document.getElementById('intensity-threshold').addEventListener('input', functio
 		bgIntensityThreshold = value;
 	} else {
 		fgIntensityThreshold = value;
+	}
+});
+
+document.getElementById('blob-distance').addEventListener('input', function (event) {
+	const value = parseInt(this.value);
+	if (value > 0) {
+		blobDistanceSquared = value * value;
+	}
+});
+
+document.getElementById('min-blob-points').addEventListener('input', function (event) {
+	const value = parseInt(this.value);
+	if (value > 0) {
+		minBlobPoints = value;
 	}
 });
 
