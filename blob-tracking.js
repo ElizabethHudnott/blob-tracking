@@ -8,60 +8,107 @@ function compareNumbers(a, b) {
 	return a - b;
 }
 
+class Point {
+	constructor(x, y) {
+		this.x = x;
+		this.y = y;
+	}
+}
+
 class BlobShape {
 	constructor(x, y) {
 		this.left = x;
 		this.right = x;
 		this.top = y;
 		this.bottom = y;
-		this.xCoords = [x];
-		this.yCoords = [y];
+		this.xCoordsOnRow = [x];
+		this.leftBoundary = [];
+		this.rightBoundary = [];
+		this.hull = undefined;
+		this.numPoints = 0;
 	}
 
-	distance(x, y) {
-		const yDistance = y - this.bottom;
-		let xDistance = 0;
+	distanceX(x) {
+		let distance = 0;
 		if (x < this.left) {
-			xDistance = this.left - x;
+			distance = this.left - x;
 		} else if (x > this.right) {
-			xDistance = x - this.right;
+			distance = x - this.right;
 		}
-		return xDistance * xDistance + yDistance * yDistance;
+		return distance;
+	}
+
+	distanceY(y) {
+		return y - this.bottom;
 	}
 
 	add(x, y) {
-		if (x < this.left) {
-			this.left = x;
-		} else if (x > this.right) {
+		if (y === this.top) {
 			this.right = x;
-		}
-		if (y > this.bottom) {
+		} else if (y > this.bottom) {
+			this._finalizeRow();
 			this.bottom = y;
 		}
-		this.xCoords.push(x);
-		this.yCoords.push(y);
+		this.xCoordsOnRow.push(x);
 	}
 
-	get numPoints() {
-		return this.xCoords.length;
+	_finalizeRow() {
+		const coordsOnRow = this.xCoordsOnRow;
+		const numCoords = coordsOnRow.length;
+		this.numPoints += numCoords;
+		const lb = Math.trunc((numCoords - 1) * 0.1);
+		const ub = Math.trunc((numCoords - 1) * 0.9);
+		this.leftBoundary.push(coordsOnRow[lb]);
+		this.rightBoundary.push(coordsOnRow[ub]);
+		this.left = coordsOnRow[0];
+		this.right = coordsOnRow[numCoords - 1];
+		this.xCoordsOnRow = [];
+	}
+
+	finalizeBoundary() {
+		this._finalizeRow();
+		const leftBoundary = this.leftBoundary;
+		const rightBoundary = this.rightBoundary;
+		const numRows = leftBoundary.length;
+		const points = [];
+		for (let i = 0; i < numRows; i++) {
+			const y = this.top + i;
+			points.push(new Point(leftBoundary[i], y));
+			points.push(new Point(rightBoundary[i], y));
+		}
+		this.hull = convexhull.makeHullPresorted(points);
+	}
+
+	tracePath(context) {
+		const points = this.hull;
+		const numPoints = points.length;
+		let point = points[0];
+		context.moveTo(point.x, point.y);
+		for (let i = 1; i < numPoints; i++) {
+			point = points[i];
+			context.lineTo(point.x, point.y);
+		}
+		context.closePath();
 	}
 
 	centre() {
-		const xCoords = this.xCoords;
-		const yCoords = this.yCoords;
-		const numPoints = xCoords.length;
-		xCoords.sort(compareNumbers);
-		yCoords.sort(compareNumbers);
-
-		const lowIndex = Math.trunc(numPoints * (1 - BOUNDING_BOX_PERCENT));
-		const highIndex = Math.trunc(numPoints * BOUNDING_BOX_PERCENT);
-		this.left = xCoords[lowIndex];
-		this.right = xCoords[highIndex];
-		this.top = yCoords[lowIndex];
-		this.bottom = yCoords[highIndex];
-
-		const medianIndex = Math.trunc(numPoints / 2);
-		return [xCoords[medianIndex], yCoords[medianIndex]];
+		const leftBoundary = this.leftBoundary;
+		const rightBoundary = this.rightBoundary;
+		const numRows = leftBoundary.length;
+		let totalX = 0;
+		let totalY = 0;
+		let area = 0;
+		for (let i = 0; i < numRows; i++) {
+			const left = leftBoundary[i];
+			const right = rightBoundary[i];
+			totalX += (left + right) / 2;
+			const pointsOnRow = (right - left + 1);
+			totalY += (i + 1) * pointsOnRow;
+			area += pointsOnRow;
+		}
+		const totalXMoment = totalX / numRows;
+		const totalYMoment = this.top + totalY / area - 1;
+		return [totalXMoment, totalYMoment];
 	}
 
 	get width() {
@@ -92,8 +139,7 @@ let fgHueThreshold = parseFloat(document.getElementById('hue-threshold').value) 
 let fgChromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
 let fgIntensityThreshold = parseFloat(document.getElementById('intensity-threshold').value) / 765;
 let bgHueThreshold = 0.5, bgChromaThreshold = 1, bgIntensityThreshold = 1;
-let blobDistanceSquared = parseInt(document.getElementById('blob-distance').value);
-blobDistanceSquared *= blobDistanceSquared;
+let blobDistanceX = parseInt(document.getElementById('blob-distance').value);
 let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
@@ -165,13 +211,14 @@ function showWebcam(time) {
 			let closestIndex;
 			for (let j = 0; j < blobs.length; j++) {
 				const blob = blobs[j];
-				const distance = blob.distance(x, y)
-				if (distance < closestDistance) {
-					closestDistance = distance;
+				const dx = blob.distanceX(x);
+				const dy = blob.distanceY(y);
+				if (dx < closestDistance && dy <= 1) {
+					closestDistance = dx;
 					closestIndex = j;
 				}
 			}
-			if (closestDistance <= blobDistanceSquared) {
+			if (closestDistance <= blobDistanceX) {
 				blobs[closestIndex].add(x, y);
 			} else {
 				blobs.push(new BlobShape(x, y));
@@ -192,16 +239,19 @@ function showWebcam(time) {
 		previousPixels[i + 2] = hci[2] * 255;
 	}
 	if (display === Display.BLOBS) {
-		context.beginPath();
 		for (let blob of blobs) {
 			if (blob.numPoints >= minBlobPoints) {
-				context.strokeRect(blob.left, blob.top, blob.width, blob.height);
+				blob.finalizeBoundary();
+				context.beginPath();
+				blob.tracePath(context);
+				context.stroke();
 				const [x, y] = blob.centre();
+				context.beginPath();
 				context.moveTo(x, y);
 				context.arc(x, y, POINT_SIZE, 0, TWO_PI);
+				context.fill();
 			}
 		}
-		context.fill();
 	} else {
 		context.putImageData(displayData, 0, 0);
 	}
@@ -366,7 +416,7 @@ document.getElementById('intensity-threshold').addEventListener('input', functio
 document.getElementById('blob-distance').addEventListener('input', function (event) {
 	const value = parseInt(this.value);
 	if (value > 0) {
-		blobDistanceSquared = value * value;
+		blobDistanceX = value;
 	}
 });
 
