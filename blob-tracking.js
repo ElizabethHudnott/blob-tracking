@@ -71,8 +71,8 @@ class BlobShape {
 		const points = [];
 		for (let i = 0; i < numRows; i++) {
 			const y = this.top + i;
-			points.push(new Point(leftBoundary[i], y));
-			points.push(new Point(rightBoundary[i], y));
+			points.push(new Point(width - leftBoundary[i], y));
+			points.push(new Point(width - rightBoundary[i], y));
 		}
 		this.hull = convexhull.makeHullPresorted(points);
 	}
@@ -159,7 +159,7 @@ class BlobShape {
 		}
 		const totalXMoment = totalX / numRows;
 		const totalYMoment = this.top + totalY / area - 1;
-		return [totalXMoment, totalYMoment];
+		return [width - totalXMoment, totalYMoment];
 	}
 
 	get width() {
@@ -346,8 +346,14 @@ async function startCam() {
 		updatePeriod = 1000 / info.frameRate;
 		canvas.width = width;
 		canvas.height = height;
+		context.setTransform(1, 0, 0, 1, width / 2, 0);
+		context.scale(-1, 1);
+		context.translate(-width / 2, 0);
 		offscreenCanvas.width = width;
 		offscreenCanvas.height = height;
+		offscreenContext.setTransform(1, 0, 0, 1, width / 2, 0);
+		offscreenContext.scale(-1, 1);
+		offscreenContext.translate(-width / 2, 0);
 		previousPixels = new Uint8ClampedArray(numBytes);
 		if (backgroundPixels === undefined || backgroundPixels.length !== numBytes) {
 			backgroundPixels = new Uint8ClampedArray(numBytes);
