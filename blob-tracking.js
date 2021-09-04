@@ -56,8 +56,8 @@ class BlobShape {
 		const coordsOnRow = this.xCoordsOnRow;
 		const numCoords = coordsOnRow.length;
 		this.numPoints += numCoords;
-		const lb = Math.trunc((numCoords - 1) * 0.1);
-		const ub = Math.trunc((numCoords - 1) * 0.9);
+		const lb = Math.trunc((numCoords - 1) * (1 - boundaryFraction));
+		const ub = Math.trunc((numCoords - 1) * boundaryFraction);
 		this.leftBoundary.push(coordsOnRow[lb]);
 		this.rightBoundary.push(coordsOnRow[ub]);
 		this.right = coordsOnRow[numCoords - 1];
@@ -192,7 +192,7 @@ let fgIntensityThreshold = parseFloat(document.getElementById('intensity-thresho
 let bgHueThreshold = 0.5, bgChromaThreshold = 1, bgIntensityThreshold = 1;
 let blobDistanceX = parseInt(document.getElementById('blob-distance').value);
 let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
-let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percentile')) / 100;
+let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percentile').value) / 100;
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
 motionThreshold *= motionThreshold;
