@@ -23,9 +23,12 @@ class BlobShape {
 		this.xCoordsOnRow = [x];
 		this.leftBoundary = [];
 		this.rightBoundary = [];
-		this.hull = undefined;
 		this.numPoints = 0;
+		this.hull = undefined;
+		this.centreX = 0;
+		this.centreY = 0;
 		this.id = undefined;
+		this.taken = false;
 	}
 
 	distanceX(x) {
@@ -143,7 +146,7 @@ class BlobShape {
 		context.closePath();
 	}
 
-	centre() {
+	computeCentre() {
 		const leftBoundary = this.leftBoundary;
 		const rightBoundary = this.rightBoundary;
 		const numRows = leftBoundary.length;
@@ -160,7 +163,8 @@ class BlobShape {
 		}
 		const totalXMoment = totalX / numRows;
 		const totalYMoment = this.top + totalY / area - 1;
-		return [width - totalXMoment, totalYMoment];
+		this.centreX = width - totalXMoment
+		this.centreY = totalYMoment;
 	}
 
 	get width() {
@@ -197,6 +201,8 @@ motionThreshold *= motionThreshold;
 let videoTrack, width, height, bytesPerRow, numBytes, updatePeriod, animID;
 let displayData, previousPixels, backgroundPixels, keyColor;
 let keyColorComponents = [0, 0, 0];
+let previousBlobs = [];
+let nextID = 1;
 
 const Display = Object.freeze({
 	OFF: 0,
@@ -209,6 +215,12 @@ const Display = Object.freeze({
 
 let display = Display.STOPPED;
 let lastDisplay = Display.COLOR_KEY;
+
+function generateBlobID() {
+	const id = nextID;
+	nextID++;
+	return id;
+}
 
 function showWebcam(time) {
 	animID = requestAnimationFrame(showWebcam);
@@ -316,22 +328,89 @@ function showWebcam(time) {
 			const blob = blobs[i];
 			if (blob.numPoints >= minBlobPoints) {
 				i++;
-				blob.id = i;
 			} else {
 				blobs.splice(i, 1);
 			}
 		}
 		context.beginPath();
 		for (let blob of blobs) {
+			blob.computeCentre();
 			blob.findComplexHull();
 			blob.tracePath(context);
 		}
 		context.stroke();
+
+		const numBlobs = blobs.length;
+		const numPrevious = previousBlobs.length;
+		if (numPrevious === 0) {
+			for (let blob of blobs) {
+				blob.id = generateBlobID();
+			}
+		} if (numBlobs >= numPrevious) {
+			// More current blobs than previous blobs
+			for (let previousBlob of previousBlobs) {
+				let closestDistanceSq = Infinity;
+				let closestIndex = 0;
+				const prevX = previousBlob.centreX;
+				const prevY = previousBlob.centreY;
+				for (let i = 0; i < numBlobs; i++) {
+					const blob = blobs[i];
+					if (!blob.taken) {
+						const x = blob.centreX;
+						const y = blob.centreY;
+						const dx = x - prevX;
+						const dy = y - prevY;
+						const distanceSq = dx * dx + dy * dy;
+						if (distanceSq < closestDistanceSq) {
+							closestIndex = i;
+							closestDistanceSq = distanceSq;
+						}
+					}
+				}
+				const closestBlob = blobs[closestIndex];
+				closestBlob.id = previousBlob.id;
+				closestBlob.taken = true;
+			}
+			for (let blob of blobs) {
+				if (!blob.taken) {
+					blob.id = generateBlobID();
+				}
+			}
+		} else {
+			// More previous blobs than current blobs
+			for (let blob of previousBlobs) {
+				blob.taken = false;
+			}
+			for (let blob of blobs) {
+				let closestDistanceSq = Infinity;
+				let closestIndex = 0;
+				const x = blob.centreX;
+				const y = blob.centreY;
+				for (let i = 0; i < numPrevious; i++) {
+					const previousBlob = previousBlobs[i];
+					if (!previousBlob.taken) {
+						const prevX = previousBlob.centreX;
+						const prevY = previousBlob.centreY;
+						const dx = x - prevX;
+						const dy = y - prevY;
+						const distanceSq = dx * dx + dy * dy;
+						if (distanceSq < closestDistanceSq) {
+							closestIndex = i;
+							closestDistanceSq = distanceSq;
+						}
+					}
+				}
+				const closestBlob = previousBlobs[closestIndex];
+				blob.id = closestBlob.id;
+				closestBlob.taken = true;
+			}
+		}
+
 		context.setTransform(1, 0, 0, 1, 0, 0);
 		for (let blob of blobs) {
-			const [x, y] = blob.centre();
-			context.fillText(blob.id, width - x, y)
+			context.fillText(blob.id, width - blob.centreX, blob.centreY);
 		}
+		previousBlobs = blobs;
 	} else {
 		context.putImageData(displayData, 0, 0);
 	}
