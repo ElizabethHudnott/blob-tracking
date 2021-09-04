@@ -192,6 +192,7 @@ let fgIntensityThreshold = parseFloat(document.getElementById('intensity-thresho
 let bgHueThreshold = 0.5, bgChromaThreshold = 1, bgIntensityThreshold = 1;
 let blobDistanceX = parseInt(document.getElementById('blob-distance').value);
 let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
+let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percentile')) / 100;
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
 motionThreshold *= motionThreshold;
@@ -496,6 +497,13 @@ document.getElementById('min-blob-points').addEventListener('input', function (e
 	const value = parseInt(this.value);
 	if (value > 0) {
 		minBlobPoints = value;
+	}
+});
+
+document.getElementById('blob-boundary-percentile').addEventListener('input', function (event) {
+	const value = parseFloat(this.value);
+	if (value >= 50 && value <= 100) {
+		boundaryFraction = value / 100;
 	}
 });
 

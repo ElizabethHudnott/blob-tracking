@@ -56,13 +56,18 @@
 		<tr>
 			<td>Max Point to Blob Distance</td>
 			<td>
-				<input type="number" min="1" max="99" value="20" id="blob-distance">
+				<input type="number" min="1" max="100" value="20" id="blob-distance">
 			</td>
 			<td>Min Points in a Blob</td>
 			<td>
 				<input type="number" min="10" max="999990" step="50" value="800" id="min-blob-points">
 			</td>
 		</tr>
+		<tr>
+			<td>Blob Boundary Percentile</td>
+			<td>
+				<input type="number" min="51" max="100" value="90" id="blob-boundary-percentile">
+			</td>
 		<tr>
 			<td>Motion Threshold</td>
 			<td>
@@ -107,7 +112,7 @@
 			Select <b>Blobs</b> from the <b>Display List</b>.
 		</li>
 		<li>
-			Alter <b>Max Point to Blob Distance</b> and <b>Min Points in a Blob</b> as needed.
+			Alter <b>Max Point to Blob Distance, Min Points in a Blob</b> and <b>Blob Boundary Percentile</b> if needed.
 		</li>
 	</ol>
 	<ul>
