@@ -42,9 +42,9 @@
 			</td>
 		</tr>
 		<tr>
-			<td>Chroma</td>
+			<td>Saturation</td>
 			<td colspan="3">
-				<input type="range" min="0" max="255" value="128" id="chroma-threshold" class="form-control-range">
+				<input type="range" min="0" max="255" value="128" id="saturation-threshold" class="form-control-range">
 			</td>
 		</tr>
 		<tr>
@@ -76,11 +76,7 @@
 		<tr>
 			<td>Motion Threshold</td>
 			<td>
-				<input type="number" min="0.01" max="1.73" step="0.01" value="0.2" id="motion-threshold">
-			</td>
-			<td>Hue Weight</td>
-			<td>
-				<input type="number" min="0" max="1" step="0.05" value="0.15" id="motion-hue-weight">
+				<input type="number" min="1" max="255" value="25" id="motion-threshold">
 			</td>
 		</tr>
 	</table>
@@ -99,7 +95,7 @@
 			Select <b>Background Subtraction</b> from the <b>Display</b> list.
 		</li>
 		<li>
-			Reduce the <b>Intensity</b> threshold. Try to expose the items you want to keep track of as much as possible. This is the top priority. But if you can then also try keep as much of the background as possible green. Do the same with the <b>Chroma</b> and <b>Hue</b> sliders.
+			Reduce the <b>Intensity</b> threshold. Try to expose the items you want to keep track of as much as possible. This is the top priority. But if you can then also try keep as much of the background as possible green. Do the same with the <b>Saturation</b> and <b>Hue</b> sliders.
 		</li>
 		<li>
 			Select <b>Camera</b> from the <b>Display</b> list.
@@ -111,7 +107,7 @@
 			Tick the <b>Exclude Background</b> box.
 		</li>
 		<li>
-			Adjust the <b>Hue</b>, <b>Chroma</b> and <b>Intensity</b> sliders until you've covered up as much as possible of the items you want track and removed as much green as possible from the background.
+			Adjust the <b>Hue</b>, <b>Saturation</b> and <b>Intensity</b> sliders until you've covered up as much as possible of the items you want track and removed as much green as possible from the background.
 		</li>
 		<li>
 			Select <b>Blobs</b> from the <b>Display List</b>.

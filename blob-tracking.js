@@ -15,16 +15,14 @@ let sampleSize = 1;
 let lastUpdate = 0;
 let subtractBackground = document.getElementById('subtract-background').checked;
 let fgHueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
-let fgChromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
+let fgSaturationThreshold = parseFloat(document.getElementById('saturation-threshold').value) / 255;
 let fgIntensityThreshold = parseFloat(document.getElementById('intensity-threshold').value) / 765;
-let bgHueThreshold = 0.5, bgChromaThreshold = 1, bgIntensityThreshold = 1;
+let bgHueThreshold = 0.5, bgSaturationThreshold = 1, bgIntensityThreshold = 1;
 let blobDistanceX = parseInt(document.getElementById('blob-distance').value);
 let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percentile').value) / 100;
 let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
 let maxTTL = parseInt(document.getElementById('max-blob-ttl').value);
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
-let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
-motionThreshold *= motionThreshold;
 let videoTrack, width, height, bytesPerRow, numBytes, updatePeriod, animID;
 let displayData, previousPixels, backgroundPixels, keyColor;
 let keyColorComponents = [0, 0, 0];
@@ -263,20 +261,19 @@ function showWebcam(time) {
 		let red = pixels[i];
 		let green = pixels[i + 1];
 		let blue = pixels[i + 2];
-		let hci = rgbToHCI(red, green, blue);
-		let colorVector = colorDifference(hci, targetColor);
-		const colorMatch = colorVector[0] <= fgHueThreshold && colorVector[1] <= fgChromaThreshold && colorVector[2] <= fgIntensityThreshold;
+		let hsi = rgbToHSI(red, green, blue);
+		let colorVector = colorDifference(hsi, targetColor);
+		const colorMatch = colorVector[0] <= fgHueThreshold && colorVector[1] <= fgSaturationThreshold && colorVector[2] <= fgIntensityThreshold;
 
 		let backgroundMatch = false;
 		if (subtractBackground) {
 			const backgroundColor = [backgroundPixels[i] / 255, backgroundPixels[i + 1] / 255, backgroundPixels[i + 2] / 255];
-			colorVector = colorDifference(hci, backgroundColor);
-			backgroundMatch = colorVector[0] <= bgHueThreshold && colorVector[1] <= bgChromaThreshold && colorVector[2] <= bgIntensityThreshold;;
+			colorVector = colorDifference(hsi, backgroundColor);
+			backgroundMatch = colorVector[0] <= bgHueThreshold && colorVector[1] <= bgSaturationThreshold && colorVector[2] <= bgIntensityThreshold;;
 		}
 
-		const previousColor = [previousPixels[i] / 255, previousPixels[i + 1] / 255, previousPixels[i + 2] / 255];
-		colorVector = colorDifference(hci, previousColor);
-		const motionMatch = hueMotionWeight * colorVector[0] * colorVector[0] + colorVector[1] * colorVector[1] + colorVector[2] * colorVector[2] >= motionThreshold;
+		const previousIntensity = previousPixels[i / 4];
+		const motionMatch = Math.abs(hsi[2] * 255 - previousIntensity) >= motionThreshold;
 
 		if (backgroundMatch) {
 			if (display === Display.BACKGROUND_SUBTRACTION) {
@@ -311,9 +308,7 @@ function showWebcam(time) {
 			displayPixels[i + 3] = motionMatch ? 0 : 255;	// Set alpha
 		}
 
-		previousPixels[i] = hci[0] * 255;
-		previousPixels[i + 1] = hci[1] * 255;
-		previousPixels[i + 2] = hci[2] * 255;
+		previousPixels[i / 4] = hsi[2] * 255;
 	}
 	if (display === Display.BLOBS) {
 		for (let blob of blobs) {
@@ -459,7 +454,7 @@ async function startCam() {
 		offscreenCanvas.width = width;
 		offscreenCanvas.height = height;
 		offscreenContext.setTransform(-1, 0, 0, 1, width, 0);
-		previousPixels = new Uint8ClampedArray(numBytes);
+		previousPixels = new Uint8ClampedArray(width * height);
 		if (backgroundPixels === undefined || backgroundPixels.length !== numBytes) {
 			backgroundPixels = new Uint8ClampedArray(numBytes);
 		}
@@ -474,6 +469,8 @@ async function startCam() {
 		context.textAlign = 'center';
 		context.textBaseline = 'middle';
 		setKeyColor(document.getElementById('color-keying').value);
+
+		// TODO if width or height have changed and motion is displayed then reallocate displayData.
 	}  catch(error) {
 		console.error(error);
 	} finally {
@@ -493,7 +490,7 @@ function stopCam() {
 }
 
 function captureBackground() {
-	backgroundPixels = previousPixels.slice();
+	backgroundPixels = context.getImageData(0, 0, width, height).data;
 }
 
 canvas.addEventListener('pointerdown', function (event) {
@@ -530,17 +527,17 @@ canvas.addEventListener('pointerdown', function (event) {
 	red = red / numPixels;
 	green = green / numPixels;
 	blue = blue / numPixels;
-	targetColor = rgbToHCI(red, green, blue);
+	targetColor = rgbToHSI(red, green, blue);
 });
 
-function rgbToHCI(red, green, blue) {
+function rgbToHSI(red, green, blue) {
 	red /= 255;
 	green /= 255;
 	blue /= 255;
 	const max = Math.max(red, green, blue);
 	const min = Math.min(red, green, blue);
 	const delta = max - min;
-	let hue;
+	let hue, saturation;
 	if (delta === 0) {
 		hue = 0;
 	} else if (max === red) {
@@ -555,7 +552,12 @@ function rgbToHCI(red, green, blue) {
 	}
 	hue /= 6;
 	const intensity = (red + green + blue) / 3;
-	return [hue, delta, intensity];
+	if (intensity === 0) {
+		saturation = 0;
+	} else {
+		saturation = 1 - min / intensity;
+	}
+	return [hue, saturation, intensity];
 }
 
 function colorDifference(color1, color2) {
@@ -568,9 +570,9 @@ function colorDifference(color1, color2) {
 			hueDiff = 1 - hueDiff;
 		}
 	}
-	const chromaDiff = Math.abs(color1[1] - color2[1]);
+	const saturationDiff = Math.abs(color1[1] - color2[1]);
 	const intensityDiff = Math.abs(color1[2] - color2[2]);
-	return [hueDiff, chromaDiff, intensityDiff];
+	return [hueDiff, saturationDiff, intensityDiff];
 }
 
 canvas.addEventListener('contextmenu', function (event) {
@@ -586,12 +588,12 @@ document.getElementById('hue-threshold').addEventListener('input', function (eve
 	}
 });
 
-document.getElementById('chroma-threshold').addEventListener('input', function (event) {
+document.getElementById('saturation-threshold').addEventListener('input', function (event) {
 	const value = parseFloat(this.value) / 255;
 	if (display === Display.BACKGROUND_SUBTRACTION) {
-		bgChromaThreshold = value;
+		bgSaturationThreshold = value;
 	} else {
-		fgChromaThreshold = value;
+		fgSaturationThreshold = value;
 	}
 });
 
@@ -633,16 +635,9 @@ document.getElementById('max-blob-ttl').addEventListener('input', function (even
 });
 
 document.getElementById('motion-threshold').addEventListener('input', function (event) {
-	let value = parseFloat(this.value);
-	if (value > 0) {
-		motionThreshold = value * value;
-	}
-});
-
-document.getElementById('motion-hue-weight').addEventListener('input', function (event) {
-	const value = parseFloat(this.value);
-	if (value >= 0) {
-		hueMotionWeight = value;
+	let value = parseInt(this.value);
+	if (value > 0 && value <= 255) {
+		motionThreshold = value;
 	}
 });
 
@@ -654,20 +649,24 @@ displaySelector.addEventListener('input', function (event) {
 		lastDisplay = display;
 		break;
 	case Display.MOTION_TRACKER:
-		displayData.data.fill(0);
+		if (displayData === undefined) {
+			displayData = new ImageData(width, height);
+		} else {
+			displayData.data.fill(0);
+		}
 		break;
 	}
 
 	const bgSubtractEnable = document.getElementById('subtract-background');
 	if (display === Display.BACKGROUND_SUBTRACTION) {
 		document.getElementById('hue-threshold').value = bgHueThreshold * 1530;
-		document.getElementById('chroma-threshold').value = bgChromaThreshold * 255;
+		document.getElementById('saturation-threshold').value = bgSaturationThreshold * 255;
 		document.getElementById('intensity-threshold').value = bgIntensityThreshold * 765;
 		bgSubtractEnable.disabled = true;
 		subtractBackground = true;
 	} else {
 		document.getElementById('hue-threshold').value = fgHueThreshold * 1530;
-		document.getElementById('chroma-threshold').value = fgChromaThreshold * 255;
+		document.getElementById('saturation-threshold').value = fgSaturationThreshold * 255;
 		document.getElementById('intensity-threshold').value = fgIntensityThreshold * 765;
 		bgSubtractEnable.disabled = false;
 		subtractBackground = bgSubtractEnable.checked;
