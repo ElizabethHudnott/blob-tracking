@@ -554,8 +554,8 @@ function rgbToHCI(red, green, blue) {
 		hue += 6;
 	}
 	hue /= 6;
-	const lightness = (red + green + blue) / 3;
-	return [hue, delta, lightness];
+	const intensity = (red + green + blue) / 3;
+	return [hue, delta, intensity];
 }
 
 function colorDifference(color1, color2) {
@@ -569,8 +569,8 @@ function colorDifference(color1, color2) {
 		}
 	}
 	const chromaDiff = Math.abs(color1[1] - color2[1]);
-	const lightnessDiff = Math.abs(color1[2] - color2[2]);
-	return [hueDiff, chromaDiff, lightnessDiff];
+	const intensityDiff = Math.abs(color1[2] - color2[2]);
+	return [hueDiff, chromaDiff, intensityDiff];
 }
 
 canvas.addEventListener('contextmenu', function (event) {
