@@ -44,6 +44,8 @@ class BlobShape {
 	static tryNextID = 1;
 
 	constructor(x, y) {
+		this.minLeft = undefined;
+		this.maxRight = undefined;
 		this.left = x;
 		this.right = x;
 		this.top = y;
@@ -88,13 +90,26 @@ class BlobShape {
 	finalizeRow() {
 		const coordsOnRow = this.xCoordsOnRow;
 		const numCoords = coordsOnRow.length;
-		this.numPoints += numCoords;
 		const lb = Math.trunc((numCoords - 1) * (1 - boundaryFraction));
 		const ub = Math.trunc((numCoords - 1) * boundaryFraction);
-		this.leftBoundary.push(coordsOnRow[lb]);
-		this.rightBoundary.push(coordsOnRow[ub]);
+		this.numPoints += ub - lb + 1;
+		const left = coordsOnRow[lb];
+		const right = coordsOnRow[ub];
+		if (this.leftBoundary.length === 0) {
+			this.minLeft = left;
+			this.maxRight = right;
+		} else {
+			this.minLeft = Math.min(left, this.minLeft);
+			this.maxRight = Math.max(right, this.maxRight);
+		}
+		this.leftBoundary.push(left);
+		this.rightBoundary.push(right);
 		this.right = coordsOnRow[numCoords - 1];
 		this.xCoordsOnRow = [];
+	}
+
+	get width() {
+		return this.maxRight - this.minLeft;
 	}
 
 	findComplexHull() {
