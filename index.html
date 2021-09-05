@@ -58,16 +58,21 @@
 			<td>
 				<input type="number" min="1" max="100" value="20" id="blob-distance">
 			</td>
-			<td>Min Points in a Blob</td>
-			<td>
-				<input type="number" min="10" max="999990" step="50" value="800" id="min-blob-points">
-			</td>
-		</tr>
-		<tr>
 			<td>Blob Boundary Percentile</td>
 			<td>
 				<input type="number" min="51" max="100" value="90" id="blob-boundary-percentile">
 			</td>
+		</tr>
+		<tr>
+			<td>Min Points in a Blob</td>
+			<td>
+				<input type="number" min="10" max="999990" step="50" value="800" id="min-blob-points">
+			</td>
+			<td>Max Blob TTL</td>
+			<td>
+				<input type="number" min="1"  max="999" value="100" id="max-blob-ttl">
+			</td>
+		</tr>
 		<tr>
 			<td>Motion Threshold</td>
 			<td>
@@ -94,7 +99,7 @@
 			Select <b>Background Subtraction</b> from the <b>Display</b> list.
 		</li>
 		<li>
-			Reduce the <b>Intensity</b> threshold. Try to expose as much as possible of the things you want to track but keep as much of the background as you can green. Do the same with the <b>Chroma</b> and <b>Hue</b> sliders.
+			Reduce the <b>Intensity</b> threshold. Try to expose the items you want to keep track of as much as possible. This is the top priority. But if you can then also try keep as much of the background as possible green. Do the same with the <b>Chroma</b> and <b>Hue</b> sliders.
 		</li>
 		<li>
 			Select <b>Camera</b> from the <b>Display</b> list.

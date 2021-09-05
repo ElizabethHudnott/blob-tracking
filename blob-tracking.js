@@ -3,6 +3,33 @@
 const TWO_PI = 2 * Math.PI;
 const POINT_SIZE = 7;
 
+const video = document.getElementById('webcam');
+const canvas = document.getElementById('canvas');
+const context = canvas.getContext('2d');
+const offscreenCanvas = document.createElement('CANVAS');
+const offscreenContext = offscreenCanvas.getContext('2d');
+const filter = 'blur(1)';
+const displaySelector = document.getElementById('camera-display');
+let targetColor = [0, 0, 0];
+let sampleSize = 1;
+let lastUpdate = 0;
+let subtractBackground = document.getElementById('subtract-background').checked;
+let fgHueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
+let fgChromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
+let fgIntensityThreshold = parseFloat(document.getElementById('intensity-threshold').value) / 765;
+let bgHueThreshold = 0.5, bgChromaThreshold = 1, bgIntensityThreshold = 1;
+let blobDistanceX = parseInt(document.getElementById('blob-distance').value);
+let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percentile').value) / 100;
+let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
+let maxTTL = parseInt(document.getElementById('max-blob-ttl').value);
+let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
+let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
+motionThreshold *= motionThreshold;
+let videoTrack, width, height, bytesPerRow, numBytes, updatePeriod, animID;
+let displayData, previousPixels, backgroundPixels, keyColor;
+let keyColorComponents = [0, 0, 0];
+let previousBlobs = [];
+
 function compareNumbers(a, b) {
 	return a - b;
 }
@@ -15,6 +42,9 @@ class Point {
 }
 
 class BlobShape {
+	static activeIDs = new Set();
+	static tryNextID = 1;
+
 	constructor(x, y) {
 		this.left = x;
 		this.right = x;
@@ -29,6 +59,7 @@ class BlobShape {
 		this.centreY = 0;
 		this.id = undefined;
 		this.taken = false;
+		this.ttl = maxTTL;
 	}
 
 	distanceX(x) {
@@ -162,47 +193,39 @@ class BlobShape {
 			area += pointsOnRow;
 		}
 		const totalXMoment = totalX / numRows;
-		const totalYMoment = this.top + totalY / area - 1;
+		const totalYMoment = this.top + totalY / area;
 		this.centreX = width - totalXMoment
 		this.centreY = totalYMoment;
 	}
 
-	get width() {
-		return this.right - this.left + 1;
+	generateID() {
+		let id = BlobShape.tryNextID;
+		while (BlobShape.activeIDs.has(id)) {
+			id++;
+		}
+		this.id = id;
+		BlobShape.activeIDs.add(id);
+		BlobShape.tryNextID = id + 1;
 	}
 
-	get height() {
-		return this.bottom - this.top + 1;
+	isOffscreen() {
+		if (this.taken) {
+			return false;
+		}
+		this.ttl--;
+		if (this.ttl > 0) {
+			return true;
+		}
+
+		const id = this.id;
+		BlobShape.activeIDs.delete(id);
+		if (BlobShape.tryNextID > id) {
+			BlobShape.tryNextID = id;
+		}
+		return false;
 	}
 
 }
-
-const video = document.getElementById('webcam');
-const canvas = document.getElementById('canvas');
-const context = canvas.getContext('2d');
-const offscreenCanvas = document.createElement('CANVAS');
-const offscreenContext = offscreenCanvas.getContext('2d');
-const filter = 'blur(1)';
-const displaySelector = document.getElementById('camera-display');
-let targetColor = [0, 0, 0];
-let sampleSize = 1;
-let lastUpdate = 0;
-let subtractBackground = document.getElementById('subtract-background').checked;
-let fgHueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
-let fgChromaThreshold = parseFloat(document.getElementById('chroma-threshold').value) / 255;
-let fgIntensityThreshold = parseFloat(document.getElementById('intensity-threshold').value) / 765;
-let bgHueThreshold = 0.5, bgChromaThreshold = 1, bgIntensityThreshold = 1;
-let blobDistanceX = parseInt(document.getElementById('blob-distance').value);
-let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
-let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percentile').value) / 100;
-let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
-let hueMotionWeight = parseFloat(document.getElementById('motion-hue-weight').value);
-motionThreshold *= motionThreshold;
-let videoTrack, width, height, bytesPerRow, numBytes, updatePeriod, animID;
-let displayData, previousPixels, backgroundPixels, keyColor;
-let keyColorComponents = [0, 0, 0];
-let previousBlobs = [];
-let nextID = 1;
 
 const Display = Object.freeze({
 	OFF: 0,
@@ -215,12 +238,6 @@ const Display = Object.freeze({
 
 let display = Display.STOPPED;
 let lastDisplay = Display.COLOR_KEY;
-
-function generateBlobID() {
-	const id = nextID;
-	nextID++;
-	return id;
-}
 
 function showWebcam(time) {
 	animID = requestAnimationFrame(showWebcam);
@@ -344,9 +361,9 @@ function showWebcam(time) {
 		const numPrevious = previousBlobs.length;
 		if (numPrevious === 0) {
 			for (let blob of blobs) {
-				blob.id = generateBlobID();
+				blob.generateID();
 			}
-		} if (numBlobs >= numPrevious) {
+		} else if (numBlobs >= numPrevious) {
 			// More current blobs than previous blobs
 			for (let previousBlob of previousBlobs) {
 				let closestDistanceSq = Infinity;
@@ -373,7 +390,7 @@ function showWebcam(time) {
 			}
 			for (let blob of blobs) {
 				if (!blob.taken) {
-					blob.id = generateBlobID();
+					blob.generateID();
 				}
 			}
 		} else {
@@ -409,6 +426,13 @@ function showWebcam(time) {
 		context.setTransform(1, 0, 0, 1, 0, 0);
 		for (let blob of blobs) {
 			context.fillText(blob.id, width - blob.centreX, blob.centreY);
+		}
+		if (numBlobs < numPrevious) {
+			for (let blob of previousBlobs) {
+				if (blob.isOffscreen()) {
+					blobs.push(blob);
+				}
+			}
 		}
 		previousBlobs = blobs;
 	} else {
@@ -587,6 +611,13 @@ document.getElementById('blob-distance').addEventListener('input', function (eve
 	}
 });
 
+document.getElementById('blob-boundary-percentile').addEventListener('input', function (event) {
+	const value = parseFloat(this.value);
+	if (value >= 50 && value <= 100) {
+		boundaryFraction = value / 100;
+	}
+});
+
 document.getElementById('min-blob-points').addEventListener('input', function (event) {
 	const value = parseInt(this.value);
 	if (value > 0) {
@@ -594,10 +625,10 @@ document.getElementById('min-blob-points').addEventListener('input', function (e
 	}
 });
 
-document.getElementById('blob-boundary-percentile').addEventListener('input', function (event) {
-	const value = parseFloat(this.value);
-	if (value >= 50 && value <= 100) {
-		boundaryFraction = value / 100;
+document.getElementById('max-blob-ttl').addEventListener('input', function (event) {
+	const value = parseInt(this.value);
+	if (value > 0) {
+		maxTTL = value;
 	}
 });
 
@@ -674,4 +705,4 @@ document.body.addEventListener('keydown', function (event) {
 	if (event.key === ' ') {
 		captureBackground();
 	}
-})
+});
