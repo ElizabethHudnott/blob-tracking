@@ -470,9 +470,9 @@ async function startCam() {
 			console.warn('Unable to disable auto white balance');
 		});
 
-		const capabilities = videoTrack.getCapabilities();
 		const info = videoTrack.getSettings();
-		if (capabilities) {
+		if (videoTrack.getCapabilities) {
+			const capabilities = videoTrack.getCapabilities();
 
 			if (capabilities.exposureCompensation) {
 				document.getElementById('cam-gain-row').hidden = false;
