@@ -332,6 +332,9 @@ function showWebcam(time) {
 
 		previousPixels[i / 4] = hsi[2] * 255;
 	}
+
+	context.putImageData(displayData, 0, 0);
+
 	if (display === Display.BLOBS) {
 		for (let blob of blobs) {
 			blob.finalizeRow();
@@ -452,8 +455,6 @@ function showWebcam(time) {
 			}
 		}
 		previousBlobs = blobs;
-	} else {
-		context.putImageData(displayData, 0, 0);
 	}
 	lastUpdate = time;
 }
