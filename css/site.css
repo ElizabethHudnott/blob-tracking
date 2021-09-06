@@ -1,0 +1,7 @@
+.form-row>[class*=col-].second-col {
+	padding-left:  1.5rem;
+}
+
+#camera-container {
+	max-width: 720px;
+}

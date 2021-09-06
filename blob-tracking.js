@@ -4,7 +4,7 @@ const TWO_PI = 2 * Math.PI;
 const POINT_SIZE = 7;
 
 const video = document.getElementById('webcam');
-const canvas = document.getElementById('canvas');
+const canvas = document.getElementById('camera-canvas');
 const context = canvas.getContext('2d');
 const offscreenCanvas = document.createElement('CANVAS');
 const offscreenContext = offscreenCanvas.getContext('2d');
@@ -19,9 +19,9 @@ let fgSaturationThreshold = parseFloat(document.getElementById('saturation-thres
 let fgIntensityThreshold = parseFloat(document.getElementById('intensity-threshold').value) / 765;
 let bgHueThreshold = 0.5, bgSaturationThreshold = 1, bgIntensityThreshold = 1;
 let blobDistanceX = parseInt(document.getElementById('blob-distance').value);
-let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percentile').value) / 100;
+let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percent').value) / 100;
 let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
-let maxTTL = parseInt(document.getElementById('max-blob-ttl').value);
+let maxTTL = parseInt(document.getElementById('blob-max-ttl').value);
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let videoTrack, width, height, bytesPerRow, numBytes, updatePeriod, animID;
 let displayData, previousPixels, backgroundPixels, keyColor;
@@ -455,7 +455,7 @@ async function startCam() {
 	const button = document.getElementById('camera-activation');
 	button.disabled = true;
 	try {
-		const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+		const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } });
 		video.srcObject = stream;
 		videoTrack = stream.getVideoTracks()[0];
 		const info = videoTrack.getSettings();
@@ -628,7 +628,7 @@ document.getElementById('blob-distance').addEventListener('input', function (eve
 	}
 });
 
-document.getElementById('blob-boundary-percentile').addEventListener('input', function (event) {
+document.getElementById('blob-boundary-percent').addEventListener('input', function (event) {
 	const value = parseFloat(this.value);
 	if (value >= 50 && value <= 100) {
 		boundaryFraction = value / 100;
@@ -642,7 +642,7 @@ document.getElementById('min-blob-points').addEventListener('input', function (e
 	}
 });
 
-document.getElementById('max-blob-ttl').addEventListener('input', function (event) {
+document.getElementById('blob-max-ttl').addEventListener('input', function (event) {
 	const value = parseInt(this.value);
 	if (value > 0) {
 		maxTTL = value;
@@ -655,6 +655,13 @@ document.getElementById('motion-threshold').addEventListener('input', function (
 		motionThreshold = value;
 	}
 });
+
+const displayControlIDs = [];
+displayControlIDs[Display.BACKGROUND_SUBTRACTION] = 'color-match-controls';
+displayControlIDs[Display.COLOR_KEY] = 'color-match-controls';
+displayControlIDs[Display.BLOBS] = 'blob-controls';
+displayControlIDs[Display.MOTION_TRACKER] = 'motion-track-controls';
+const allControlSections = ['color-match-controls', 'blob-controls', 'motion-track-controls'];
 
 displaySelector.addEventListener('input', function (event) {
 	display = parseInt(this.value);
@@ -677,14 +684,19 @@ displaySelector.addEventListener('input', function (event) {
 		document.getElementById('hue-threshold').value = bgHueThreshold * 1530;
 		document.getElementById('saturation-threshold').value = bgSaturationThreshold * 255;
 		document.getElementById('intensity-threshold').value = bgIntensityThreshold * 765;
-		bgSubtractEnable.disabled = true;
+		document.getElementById('subtract-background-controls').hidden = true;
 		subtractBackground = true;
 	} else {
 		document.getElementById('hue-threshold').value = fgHueThreshold * 1530;
 		document.getElementById('saturation-threshold').value = fgSaturationThreshold * 255;
 		document.getElementById('intensity-threshold').value = fgIntensityThreshold * 765;
-		bgSubtractEnable.disabled = false;
+		document.getElementById('subtract-background-controls').hidden = false;
 		subtractBackground = bgSubtractEnable.checked;
+	}
+
+	const controlSection = displayControlIDs[display];
+	for (let id of allControlSections) {
+		document.getElementById(id).hidden = id !== controlSection;
 	}
 });
 
