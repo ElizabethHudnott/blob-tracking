@@ -9,6 +9,7 @@ const context = canvas.getContext('2d');
 const offscreenCanvas = document.createElement('CANVAS');
 const offscreenContext = offscreenCanvas.getContext('2d');
 const filter = 'blur(1)';
+const bell = document.getElementById('bell');
 const displaySelector = document.getElementById('camera-display');
 let targetColor = [0, 0, 0];
 let sampleSize = 1;
@@ -216,9 +217,15 @@ class BlobShape {
 		while (BlobShape.activeIDs.has(id)) {
 			id++;
 		}
+		if (id < 3 && this.maxRight >= width * 0.67) {
+			while (id < 3 || BlobShape.activeIDs.has(id)) {
+				id++;
+			}
+		} else {
+			BlobShape.tryNextID = id + 1;
+		}
 		this.id = id;
 		BlobShape.activeIDs.add(id);
-		BlobShape.tryNextID = id + 1;
 	}
 
 	isOffscreen() {
@@ -588,6 +595,7 @@ document.getElementById('cam-sharpness').addEventListener('input', setCameraCont
 
 function captureBackground() {
 	backgroundPixels = context.getImageData(0, 0, width, height).data;
+	bell.play();
 }
 
 canvas.addEventListener('pointerdown', function (event) {
@@ -820,6 +828,7 @@ window.addEventListener('blur', function (event) {
 
 document.body.addEventListener('keydown', function (event) {
 	if (event.key === ' ') {
-		captureBackground();
+		event.preventDefault();
+		setTimeout(captureBackground, 3000);
 	}
 });
