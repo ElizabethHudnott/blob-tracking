@@ -455,10 +455,75 @@ async function startCam() {
 	const button = document.getElementById('camera-activation');
 	button.disabled = true;
 	try {
-		const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 } });
+		const stream = await navigator.mediaDevices.getUserMedia({
+			video: {
+				facingMode: 'user',
+				width: {max: 720}
+			}
+		});
 		video.srcObject = stream;
 		videoTrack = stream.getVideoTracks()[0];
+		videoTrack.applyConstraints({advanced: [
+			{whiteBalanceMode: 'manual'},
+		]})
+		.catch(function (err) {
+			console.warn('Unable to disable auto white balance');
+		});
+
+		const capabilities = videoTrack.getCapabilities();
 		const info = videoTrack.getSettings();
+		if (capabilities) {
+
+			if (capabilities.exposureCompensation) {
+				document.getElementById('cam-gain-row').hidden = false;
+				const slider = document.getElementById('cam-gain');
+				slider.min = capabilities.exposureCompensation.min;
+				slider.max = capabilities.exposureCompensation.max;
+				slider.step = capabilities.exposureCompensation.step;
+				slider.value = info.exposureCompensation;
+			}
+			if (capabilities.brightness) {
+				document.getElementById('cam-brightness-row').hidden = false;
+				const slider = document.getElementById('cam-brightness');
+				slider.min = capabilities.brightness.min;
+				slider.max = capabilities.brightness.max;
+				slider.step = capabilities.brightness.step;
+				slider.value = info.brightness;
+			}
+			if (capabilities.contrast) {
+				document.getElementById('cam-contrast-row').hidden = false;
+				const slider = document.getElementById('cam-contrast');
+				slider.min = capabilities.contrast.min;
+				slider.max = capabilities.contrast.max;
+				slider.step = capabilities.contrast.step;
+				slider.value = info.contrast;
+			}
+			if (capabilities.colorTemperature) {
+				document.getElementById('cam-wb-row').hidden = false;
+				const slider = document.getElementById('cam-wb');
+				slider.min = capabilities.colorTemperature.min;
+				slider.max = capabilities.colorTemperature.max;
+				slider.step = capabilities.colorTemperature.step;
+				slider.value = info.colorTemperature;
+			}
+			if (capabilities.saturation) {
+				document.getElementById('cam-saturation-row').hidden = false;
+				const slider = document.getElementById('cam-saturation');
+				slider.min = capabilities.saturation.min;
+				slider.max = capabilities.saturation.max;
+				slider.step = capabilities.saturation.step;
+				slider.value = info.saturation;
+			}
+			if (capabilities.sharpness) {
+				document.getElementById('cam-sharpness-row').hidden = false;
+				const slider = document.getElementById('cam-sharpness');
+				slider.min = capabilities.sharpness.min;
+				slider.max = capabilities.sharpness.max;
+				slider.step = capabilities.sharpness.step;
+				slider.value = info.sharpness;
+			}
+		}
+
 		width = info.width;
 		height = info.height;
 		bytesPerRow = width * 4;
@@ -504,6 +569,23 @@ function stopCam() {
 	document.getElementById('camera-activation').innerHTML = 'Start';
 }
 
+function setCameraControl(name) {
+	return function (event) {
+		const constraints = {};
+		constraints[name] = parseInt(this.value);
+		videoTrack.applyConstraints({
+			advanced: [constraints]
+		});
+	}
+}
+
+document.getElementById('cam-gain').addEventListener('input', setCameraControl('exposureCompensation'));
+document.getElementById('cam-brightness').addEventListener('input', setCameraControl('brightness'));
+document.getElementById('cam-contrast').addEventListener('input', setCameraControl('contrast'));
+document.getElementById('cam-wb').addEventListener('input', setCameraControl('colorTemperature'));
+document.getElementById('cam-saturation').addEventListener('input', setCameraControl('saturation'));
+document.getElementById('cam-sharpness').addEventListener('input', setCameraControl('sharpness'));
+
 function captureBackground() {
 	backgroundPixels = context.getImageData(0, 0, width, height).data;
 }
@@ -515,11 +597,13 @@ canvas.addEventListener('pointerdown', function (event) {
 	if (event.button === 2) {
 		display = Display.CAMERA;
 		displaySelector.value = Display.CAMERA;
+		setDisplay();
 		return;
 	}
 	if (display === Display.CAMERA) {
 		display = lastDisplay;
 		displaySelector.value = lastDisplay;
+		setDisplay();
 	}
 	const x = Math.round(event.offsetX);
 	const y = Math.round(event.offsetY);
@@ -657,14 +741,15 @@ document.getElementById('motion-threshold').addEventListener('input', function (
 });
 
 const displayControlIDs = [];
+displayControlIDs[Display.CAMERA] = 'camera-controls';
 displayControlIDs[Display.BACKGROUND_SUBTRACTION] = 'color-match-controls';
 displayControlIDs[Display.COLOR_KEY] = 'color-match-controls';
 displayControlIDs[Display.BLOBS] = 'blob-controls';
 displayControlIDs[Display.MOTION_TRACKER] = 'motion-track-controls';
-const allControlSections = ['color-match-controls', 'blob-controls', 'motion-track-controls'];
+const allControlSections = ['camera-controls', 'color-match-controls', 'blob-controls', 'motion-track-controls'];
 
-displaySelector.addEventListener('input', function (event) {
-	display = parseInt(this.value);
+function setDisplay() {
+	display = parseInt(displaySelector.value);
 	switch (display) {
 	case Display.COLOR_KEY:
 	case Display.BLOBS:
@@ -698,7 +783,9 @@ displaySelector.addEventListener('input', function (event) {
 	for (let id of allControlSections) {
 		document.getElementById(id).hidden = id !== controlSection;
 	}
-});
+}
+
+displaySelector.addEventListener('input', setDisplay);
 
 document.getElementById('camera-activation').addEventListener('click', async function (event) {
 	if (display === Display.STOPPED) {

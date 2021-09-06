@@ -31,6 +31,57 @@
 			</div>
 		</div>
 
+		<div id="camera-controls">
+			<div class="form-row form-group" id="cam-gain-row" hidden>
+				<label class="col-3 col-form-label" for="cam-gain">
+					Gain
+				</label>
+				<div class="col-9">
+					<input type="range" class="form-control-range" id="cam-gain">
+				</div>
+			</div>
+			<div class="form-row form-group" id="cam-brightness-row" hidden>
+				<label class="col-3 col-form-label" for="cam-brightness">
+					Brightness
+				</label>
+				<div class="col-9">
+					<input type="range" class="form-control-range" id="cam-brightness">
+				</div>
+			</div>
+			<div class="form-row form-group" id="cam-contrast-row" hidden>
+				<label class="col-3 col-form-label" for="cam-contrast">
+					Contrast
+				</label>
+				<div class="col-9">
+					<input type="range" class="form-control-range" id="cam-contrast">
+				</div>
+			</div>
+			<div class="form-row form-group" id="cam-wb-row" hidden>
+				<label class="col-3 col-form-label" for="cam-wb">
+					White Balance
+				</label>
+				<div class="col-9">
+					<input type="range" class="form-control-range" id="cam-wb">
+				</div>
+			</div>
+			<div class="form-row form-group" id="cam-saturation-row" hidden>
+				<label class="col-3 col-form-label" for="cam-saturation">
+					Saturation
+				</label>
+				<div class="col-9">
+					<input type="range" class="form-control-range" id="cam-saturation">
+				</div>
+			</div>
+			<div class="form-row form-group" id="cam-sharpness-row" hidden>
+				<label class="col-3 col-form-label" for="cam-sharpness">
+					Sharpness
+				</label>
+				<div class="col-9">
+					<input type="range" class="form-control-range" id="cam-sharpness">
+				</div>
+			</div>
+		</div>
+
 		<div id="color-match-controls" hidden>
 			<div class="form-row form-group">
 				<label class="col-3 col-form-label" for="color-keying">
@@ -111,7 +162,10 @@
 		<div class="alert alert-info px-1">
 			<ol>
 				<li>
-					Make sure the room is well lit. Tweak the brightness, contrast, etc. to get the clearest picture.
+					Make sure the room is well lit.
+				</li>
+				<li>
+					Tweak the camera settings to get the clearest picture.
 				</li>
 				<li>
 					Move the items you want to track (e.g. your body) out of range of the camera and press the space bar.
