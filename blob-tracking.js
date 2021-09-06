@@ -812,7 +812,11 @@ document.getElementById('subtract-background').addEventListener('input', functio
 	subtractBackground = this.checked;
 });
 
-window.addEventListener('blur', stopCam);
+window.addEventListener('blur', function (event) {
+	if (videoTrack) {
+		stopCam();
+	}
+});
 
 document.body.addEventListener('keydown', function (event) {
 	if (event.key === ' ') {
