@@ -21,14 +21,13 @@
 			<div class="col-auto">
 				<select id="camera-display" class="form-control">
 					<option value="1">Camera</option>
-					<option value="2">Background Subtraction</option>
-					<option value="3">Colour Key</option>
-					<option value="4">Blobs</option>
-					<option value="5">Motion Tracker</option>
+					<option value="2">Motion Tracker</option>
+					<option value="3">Blobs</option>
 				</select>
 			</div>
 			<div class="col-auto">
 				<button type="button" id="camera-activation" class="btn btn-primary">Start</button>
+				<button type="button" id="camera-bg-capture" class="btn btn-secondary">Capture Background</button>
 			</div>
 		</div>
 
@@ -83,40 +82,12 @@
 			</div>
 		</div>
 
-		<div id="color-match-controls" hidden>
-			<div class="form-row form-group">
-				<label class="col-3 col-form-label" for="color-keying">
-					Key Colour
-				</label>
-				<div class="col-auto">
-					<input type="color" id="color-keying" value="#00ff00">
-				</div>
-				<div class="col-auto" id="subtract-background-controls">
-					<div class="form-check form-check-inline">
-						<input type="checkbox" id="subtract-background" class="form-check-input">
-						<label for="subtract-background" class="form-check-label">
-							Exclude background
-						</label>
-					</div>
-				</div>
-			</div>
-			<div class="form-row form-group">
-				<div class="col-3">Hue</div>
-				<div class="col-9">
-					<input type="range" min="0" max="765" value="382" id="hue-threshold" class="form-control-range">
-				</div>
-			</div>
-			<div class="form-row form-group">
-				<div class="col-3">Saturation</div>
-				<div class="col-9">
-					<input type="range" min="0" max="255" value="128" id="saturation-threshold" class="form-control-range">
-				</div>
-			</div>
-			<div class="form-row form-group">
-				<div class="col-3">Intensity</div>
-				<div class="col-9">
-					<input type="range" min="0" max="765" value="382" id="intensity-threshold" class="form-control-range">
-				</div>
+		<div class="form-row form-group" id="motion-track-controls" hidden>
+			<label class="col-3 col-form-label" for="motion-threshold">
+				Threshold
+			</label>
+			<div class="col-3">
+				<input type="number" min="1" max="765" value="150" id="motion-threshold" class="form-control">
 			</div>
 		</div>
 
@@ -151,15 +122,6 @@
 			</div>
 		</div>
 
-		<div class="form-row form-group" id="motion-track-controls" hidden>
-			<label class="col-3 col-form-label" for="motion-threshold">
-				Threshold
-			</label>
-			<div class="col-3">
-				<input type="number" min="1" max="255" value="25" id="motion-threshold" class="form-control">
-			</div>
-		</div>
-
 		<div class="alert alert-info px-1">
 			<ol>
 				<li>
@@ -167,33 +129,6 @@
 				</li>
 				<li>
 					Tweak the camera settings to get the clearest picture.
-				</li>
-				<li>
-					Move the items you want to track (e.g. your body) out of range of the camera, press the space bar and wait for the bong.
-				</li>
-				<li>
-					Put the items you want to track back into the picture.
-				</li>
-				<li>
-					Select <b>Background Subtraction</b> from the <b>Display</b> list.
-				</li>
-				<li>
-					Reduce the <b>Intensity</b> threshold. Try to expose the items you want to keep track of as much as possible. This is the top priority. But if you can then also try keep as much of the background as possible green. Do the same with the <b>Saturation</b> and <b>Hue</b> sliders.
-				</li>
-				<li>
-					Select <b>Camera</b> from the <b>Display</b> list.
-				</li>
-				<li>
-					Click on a part of the image that contains the colour of the objects that you wish to track (e.g. your skin tone).
-				</li>
-				<li>
-					Tick the <b>Exclude Background</b> box.
-				</li>
-				<li>
-					Adjust the <b>Hue</b>, <b>Saturation</b> and <b>Intensity</b> sliders until you've covered up as much as possible of the items you want track and removed as much green as possible from the background.
-				</li>
-				<li>
-					Select <b>Blobs</b> from the <b>Display</b> list.
 				</li>
 				<li>
 					Alter the other parameters if needed.

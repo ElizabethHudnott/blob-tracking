@@ -1,32 +1,25 @@
 'use strict';
 
-const TWO_PI = 2 * Math.PI;
-const POINT_SIZE = 7;
-
 const video = document.getElementById('webcam');
 const canvas = document.getElementById('camera-canvas');
 const context = canvas.getContext('2d');
 const offscreenCanvas = document.createElement('CANVAS');
 const offscreenContext = offscreenCanvas.getContext('2d');
-const filter = 'blur(1)';
 const bell = document.getElementById('bell');
-const displaySelector = document.getElementById('camera-display');
-let targetColor = [0, 0, 0];
-let sampleSize = 1;
+let display = parseInt(document.getElementById('camera-display').value);
+let displayEnabled = false;
+let capturingBackground = false;
 let lastUpdate = 0;
-let subtractBackground = document.getElementById('subtract-background').checked;
-let fgHueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
-let fgSaturationThreshold = parseFloat(document.getElementById('saturation-threshold').value) / 255;
-let fgIntensityThreshold = parseFloat(document.getElementById('intensity-threshold').value) / 765;
-let bgHueThreshold = 0.5, bgSaturationThreshold = 1, bgIntensityThreshold = 1;
+let numBackgroundFrames = 50;
+let numPreviousFrames = 4;
+let motionThreshold = parseInt(document.getElementById('motion-threshold').value);
 let blobDistanceX = parseInt(document.getElementById('blob-distance').value);
 let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percent').value) / 100;
 let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
 let maxTTL = parseInt(document.getElementById('blob-max-ttl').value);
-let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let videoTrack, width, height, bytesPerRow, numBytes, updatePeriod, animID;
-let displayData, previousPixels, backgroundPixels, keyColor;
-let keyColorComponents = [0, 0, 0];
+let motionImageData, backgroundFrames = [], backgroundPixels, previousPixels, sumPixels;
+let frameIndex = 0;
 let previousBlobs = [];
 
 function compareNumbers(a, b) {
@@ -253,14 +246,9 @@ class BlobShape {
 const Display = Object.freeze({
 	OFF: 0,
 	CAMERA: 1,
-	BACKGROUND_SUBTRACTION: 2,
-	COLOR_KEY: 3,
-	BLOBS: 4,
-	MOTION_TRACKER: 5,
+	MOTION_TRACKER: 2,
+	BLOBS: 3,
 });
-
-let display = Display.STOPPED;
-let lastDisplay = Display.COLOR_KEY;
 
 function showWebcam(time) {
 	animID = requestAnimationFrame(showWebcam);
@@ -270,43 +258,56 @@ function showWebcam(time) {
 	context.setTransform(-1, 0, 0, 1, width, 0);
 	if (display !== Display.MOTION_TRACKER) {
 		context.drawImage(video, 0, 0);
-		if (display === Display.CAMERA) {
-			return;
-		}
-		displayData = context.getImageData(0, 0, width, height);
 	}
-	offscreenContext.drawImage(video, 0, 0);
 
+	offscreenContext.drawImage(video, 0, 0);
 	const imageData = offscreenContext.getImageData(0, 0, width, height);
 	const pixels = imageData.data;
-	const displayPixels = displayData.data;
+
+	if (capturingBackground) {
+		backgroundFrames.push(pixels);
+		if (backgroundFrames.length === numBackgroundFrames) {
+			bell.play();
+			const medianFrame = new Uint8ClampedArray(width * height * 4);
+			const midIndex = Math.trunc((numBackgroundFrames - 1) * 0.5);
+			for (let i = 0; i < numBytes; i++) {
+				const values = new Uint8ClampedArray(numBackgroundFrames);
+				for (let j = 0; j < numBackgroundFrames; j++) {
+					values[j] = backgroundFrames[j][i];
+				}
+				values.sort();
+				medianFrame[i] = values[midIndex];
+			}
+			backgroundFrames = [];
+			for (let i = 0; i < numBytes; i += 4) {
+				backgroundPixels[i / 4] = intensity(medianFrame, i);
+			}
+			capturingBackground = false;
+		} else {
+			return;
+		}
+	}
+
+	if (display === Display.CAMERA) {
+		return;
+	}
+
+	const framePixels = previousPixels[frameIndex];
+	const motionImagePixels = motionImageData.data;
 	const blobs = [];
 
 	for (let i = 0; i < numBytes; i += 4) {
-		let red = pixels[i];
-		let green = pixels[i + 1];
-		let blue = pixels[i + 2];
-		let hsi = rgbToHSI(red, green, blue);
-		let colorVector = colorDifference(hsi, targetColor);
-		const colorMatch = colorVector[0] <= fgHueThreshold && colorVector[1] <= fgSaturationThreshold && colorVector[2] <= fgIntensityThreshold;
+		const pixelNum = i / 4;
 
-		let backgroundMatch = false;
-		if (subtractBackground) {
-			const backgroundColor = [backgroundPixels[i] / 255, backgroundPixels[i + 1] / 255, backgroundPixels[i + 2] / 255];
-			colorVector = colorDifference(hsi, backgroundColor);
-			backgroundMatch = colorVector[0] <= bgHueThreshold && colorVector[1] <= bgSaturationThreshold && colorVector[2] <= bgIntensityThreshold;;
-		}
+		const difference = Math.abs(intensity(pixels, i) - backgroundPixels[pixelNum]);
+		let sum = sumPixels[pixelNum];
+		sum -= framePixels[pixelNum];
+		sum += difference;
+		sumPixels[pixelNum] = sum;
+		framePixels[pixelNum] = difference;
+		const motionMatch = sum >= motionThreshold;
 
-		const previousIntensity = previousPixels[i / 4];
-		const motionMatch = Math.abs(hsi[2] * 255 - previousIntensity) >= motionThreshold;
-
-		if (backgroundMatch) {
-			if (display === Display.BACKGROUND_SUBTRACTION) {
-				displayPixels[i] = keyColorComponents[0];
-				displayPixels[i + 1] = keyColorComponents[1];
-				displayPixels[i + 2] = keyColorComponents[2];
-			}
-		} else if (colorMatch) {
+		if (motionMatch) {
 			const y = Math.trunc(i / bytesPerRow);
 			const x = (i % bytesPerRow) / 4;
 			let matched = false;
@@ -322,144 +323,141 @@ function showWebcam(time) {
 			if (!matched) {
 				blobs.push(new BlobShape(x, y));
 			}
-			if (display === Display.COLOR_KEY) {
-				displayPixels[i] = keyColorComponents[0];
-				displayPixels[i + 1] = keyColorComponents[1];
-				displayPixels[i + 2] = keyColorComponents[2];
-			}
 		}
 
 		if (display === Display.MOTION_TRACKER) {
-			displayPixels[i + 3] = motionMatch ? 0 : 255;	// Set alpha
+			motionImagePixels[i + 3] = motionMatch ? 0 : 255;	// Set alpha
 		}
 
-		previousPixels[i / 4] = hsi[2] * 255;
 	}
 
-	context.putImageData(displayData, 0, 0);
+	frameIndex = (frameIndex + 1) % numPreviousFrames;
+	lastUpdate = time;
 
-	if (display === Display.BLOBS) {
-		for (let blob of blobs) {
-			blob.finalizeRow();
-		}
-		let found;
-		do {
-			let i = 0;
-			found = false;
-			while (i < blobs.length) {
-				const blob = blobs[i];
-				let j = i + 1;
-				while (j < blobs.length) {
-					const blob2 = blobs[j];
-					const merged = blob.merge(blob2);
-					if (merged) {
-						blobs.splice(j, 1);
-						found = true;
-					} else {
-						j++;
-					}
-				}
-				i++;
-			}
-		} while (found);
+	if (display === Display.MOTION_TRACKER) {
+		context.putImageData(motionImageData, 0, 0);
+		return;
+	}
 
+	for (let blob of blobs) {
+		blob.finalizeRow();
+	}
+	let found;
+	do {
 		let i = 0;
+		found = false;
 		while (i < blobs.length) {
 			const blob = blobs[i];
-			if (blob.numPoints >= minBlobPoints) {
-				i++;
-			} else {
-				blobs.splice(i, 1);
+			let j = i + 1;
+			while (j < blobs.length) {
+				const blob2 = blobs[j];
+				const merged = blob.merge(blob2);
+				if (merged) {
+					blobs.splice(j, 1);
+					found = true;
+				} else {
+					j++;
+				}
 			}
+			i++;
 		}
-		context.beginPath();
-		for (let blob of blobs) {
-			blob.computeCentre();
-			blob.findComplexHull();
-			blob.tracePath(context);
-		}
-		context.stroke();
+	} while (found);
 
-		const numBlobs = blobs.length;
-		const numPrevious = previousBlobs.length;
-		if (numPrevious === 0) {
-			for (let blob of blobs) {
+	let i = 0;
+	while (i < blobs.length) {
+		const blob = blobs[i];
+		if (blob.numPoints >= minBlobPoints) {
+			i++;
+		} else {
+			blobs.splice(i, 1);
+		}
+	}
+	context.beginPath();
+	for (let blob of blobs) {
+		blob.computeCentre();
+		blob.findComplexHull();
+		blob.tracePath(context);
+	}
+	context.stroke();
+
+	const numBlobs = blobs.length;
+	const numPrevious = previousBlobs.length;
+	if (numPrevious === 0) {
+		for (let blob of blobs) {
+			blob.generateID();
+		}
+	} else if (numBlobs >= numPrevious) {
+		// More current blobs than previous blobs
+		for (let previousBlob of previousBlobs) {
+			let closestDistanceSq = Infinity;
+			let closestIndex = 0;
+			const prevX = previousBlob.centreX;
+			const prevY = previousBlob.centreY;
+			for (let i = 0; i < numBlobs; i++) {
+				const blob = blobs[i];
+				if (!blob.taken) {
+					const x = blob.centreX;
+					const y = blob.centreY;
+					const dx = x - prevX;
+					const dy = y - prevY;
+					const distanceSq = dx * dx + dy * dy;
+					if (distanceSq < closestDistanceSq) {
+						closestIndex = i;
+						closestDistanceSq = distanceSq;
+					}
+				}
+			}
+			const closestBlob = blobs[closestIndex];
+			closestBlob.id = previousBlob.id;
+			closestBlob.taken = true;
+		}
+		for (let blob of blobs) {
+			if (!blob.taken) {
 				blob.generateID();
 			}
-		} else if (numBlobs >= numPrevious) {
-			// More current blobs than previous blobs
-			for (let previousBlob of previousBlobs) {
-				let closestDistanceSq = Infinity;
-				let closestIndex = 0;
-				const prevX = previousBlob.centreX;
-				const prevY = previousBlob.centreY;
-				for (let i = 0; i < numBlobs; i++) {
-					const blob = blobs[i];
-					if (!blob.taken) {
-						const x = blob.centreX;
-						const y = blob.centreY;
-						const dx = x - prevX;
-						const dy = y - prevY;
-						const distanceSq = dx * dx + dy * dy;
-						if (distanceSq < closestDistanceSq) {
-							closestIndex = i;
-							closestDistanceSq = distanceSq;
-						}
-					}
-				}
-				const closestBlob = blobs[closestIndex];
-				closestBlob.id = previousBlob.id;
-				closestBlob.taken = true;
-			}
-			for (let blob of blobs) {
-				if (!blob.taken) {
-					blob.generateID();
-				}
-			}
-		} else {
-			// More previous blobs than current blobs
-			for (let blob of previousBlobs) {
-				blob.taken = false;
-			}
-			for (let blob of blobs) {
-				let closestDistanceSq = Infinity;
-				let closestIndex = 0;
-				const x = blob.centreX;
-				const y = blob.centreY;
-				for (let i = 0; i < numPrevious; i++) {
-					const previousBlob = previousBlobs[i];
-					if (!previousBlob.taken) {
-						const prevX = previousBlob.centreX;
-						const prevY = previousBlob.centreY;
-						const dx = x - prevX;
-						const dy = y - prevY;
-						const distanceSq = dx * dx + dy * dy;
-						if (distanceSq < closestDistanceSq) {
-							closestIndex = i;
-							closestDistanceSq = distanceSq;
-						}
-					}
-				}
-				const closestBlob = previousBlobs[closestIndex];
-				blob.id = closestBlob.id;
-				closestBlob.taken = true;
-			}
 		}
-
-		context.setTransform(1, 0, 0, 1, 0, 0);
+	} else {
+		// More previous blobs than current blobs
+		for (let blob of previousBlobs) {
+			blob.taken = false;
+		}
 		for (let blob of blobs) {
-			context.fillText(blob.id, width - blob.centreX, blob.centreY);
-		}
-		if (numBlobs < numPrevious) {
-			for (let blob of previousBlobs) {
-				if (blob.isOffscreen()) {
-					blobs.push(blob);
+			let closestDistanceSq = Infinity;
+			let closestIndex = 0;
+			const x = blob.centreX;
+			const y = blob.centreY;
+			for (let i = 0; i < numPrevious; i++) {
+				const previousBlob = previousBlobs[i];
+				if (!previousBlob.taken) {
+					const prevX = previousBlob.centreX;
+					const prevY = previousBlob.centreY;
+					const dx = x - prevX;
+					const dy = y - prevY;
+					const distanceSq = dx * dx + dy * dy;
+					if (distanceSq < closestDistanceSq) {
+						closestIndex = i;
+						closestDistanceSq = distanceSq;
+					}
 				}
 			}
+			const closestBlob = previousBlobs[closestIndex];
+			blob.id = closestBlob.id;
+			closestBlob.taken = true;
 		}
-		previousBlobs = blobs;
 	}
-	lastUpdate = time;
+
+	context.setTransform(1, 0, 0, 1, 0, 0);
+	for (let blob of blobs) {
+		context.fillText(blob.id, width - blob.centreX, blob.centreY);
+	}
+	if (numBlobs < numPrevious) {
+		for (let blob of previousBlobs) {
+			if (blob.isOffscreen()) {
+				blobs.push(blob);
+			}
+		}
+	}
+	previousBlobs = blobs;
 }
 
 async function startCam() {
@@ -545,23 +543,23 @@ async function startCam() {
 		offscreenCanvas.width = width;
 		offscreenCanvas.height = height;
 		offscreenContext.setTransform(-1, 0, 0, 1, width, 0);
-		previousPixels = new Uint8ClampedArray(width * height);
-		if (backgroundPixels === undefined || backgroundPixels.length !== numBytes) {
-			backgroundPixels = new Uint8ClampedArray(numBytes);
+		backgroundPixels = new Uint16Array(width * height);
+		previousPixels = [];
+		for (let i = 0; i < numPreviousFrames; i++) {
+			previousPixels.push(new Uint16Array(width * height));
 		}
+		sumPixels = new Uint16Array(width * height);
+		motionImageData = new ImageData(width, height);
 		animID = requestAnimationFrame(showWebcam);
-		display = parseInt(displaySelector.value);
+		displayEnabled = true;
 		button.innerHTML = 'Stop';
 
-		context.filter = filter;
-		offscreenContext.filter = filter;
 		context.lineWidth = 2;
 		context.font = 'bold 20px sans-serif';
 		context.textAlign = 'center';
 		context.textBaseline = 'middle';
-		setKeyColor(document.getElementById('color-keying').value);
 
-		// TODO if width or height have changed and motion is displayed then reallocate displayData.
+		// TODO if width or height have changed and motion is displayed then reallocate motionImageData.
 	}  catch(error) {
 		console.error(error);
 	} finally {
@@ -576,8 +574,15 @@ function stopCam() {
 	context.clearRect(0, 0, width, height);
 	videoTrack.stop();
 	video.srcObject = null;
-	display = Display.STOPPED;
+	displayEnabled = false;
 	document.getElementById('camera-activation').innerHTML = 'Start';
+}
+
+function intensity(pixels, index) {
+	const red = pixels[index];
+	const green = pixels[index + 1];
+	const blue = pixels[index + 2];
+	return red + green + blue;
 }
 
 function setCameraControl(name) {
@@ -596,126 +601,6 @@ document.getElementById('cam-contrast').addEventListener('input', setCameraContr
 document.getElementById('cam-wb').addEventListener('input', setCameraControl('colorTemperature'));
 document.getElementById('cam-saturation').addEventListener('input', setCameraControl('saturation'));
 document.getElementById('cam-sharpness').addEventListener('input', setCameraControl('sharpness'));
-
-function captureBackground() {
-	backgroundPixels = context.getImageData(0, 0, width, height).data;
-	bell.play();
-}
-
-canvas.addEventListener('pointerdown', function (event) {
-	if (display === Display.MOTION_TRACKER) {
-		return;
-	}
-	if (event.button === 2) {
-		display = Display.CAMERA;
-		displaySelector.value = Display.CAMERA;
-		setDisplay();
-		return;
-	}
-	if (display === Display.CAMERA) {
-		display = lastDisplay;
-		displaySelector.value = lastDisplay;
-		setDisplay();
-	}
-	const x = Math.round(event.offsetX);
-	const y = Math.round(event.offsetY);
-	const minX = Math.max(x - sampleSize, 0);
-	const minY = Math.max(y - sampleSize, 0);
-	const maxX = Math.min(x + sampleSize, width - 1);
-	const maxY = Math.min(y + sampleSize, height - 1);
-	const sampleWidth = maxX- minX;
-	const sampleHeight = maxY - minY;
-	const numPixels = sampleWidth * sampleHeight;
-	const numSampleBytes = numPixels * 4;
-	let red = 0, green = 0, blue = 0;
-	context.drawImage(video, 0, 0);
-	const pixels = context.getImageData(minX, minY, sampleWidth, sampleHeight).data;
-	for (let i = 0; i < numSampleBytes; i += 4) {
-		red += pixels[i];
-		green += pixels[i + 1];
-		blue += pixels[i + 2];
-	}
-	red = red / numPixels;
-	green = green / numPixels;
-	blue = blue / numPixels;
-	targetColor = rgbToHSI(red, green, blue);
-});
-
-function rgbToHSI(red, green, blue) {
-	red /= 255;
-	green /= 255;
-	blue /= 255;
-	const max = Math.max(red, green, blue);
-	const min = Math.min(red, green, blue);
-	const delta = max - min;
-	let hue, saturation;
-	if (delta === 0) {
-		hue = 0;
-	} else if (max === red) {
-		hue = ((green - blue) / delta) % 6;
-	} else if (max === green) {
-		hue = (blue - red) / delta + 2;
-	} else {
-		hue = (red - green) / delta + 4;
-	}
-	if (hue < 0) {
-		hue += 6;
-	}
-	hue /= 6;
-	const intensity = (red + green + blue) / 3;
-	if (intensity === 0) {
-		saturation = 0;
-	} else {
-		saturation = 1 - min / intensity;
-	}
-	return [hue, saturation, intensity];
-}
-
-function colorDifference(color1, color2) {
-	let hueDiff;
-	if (color1[1] === 0 || color2[1] === 0) {
-		hueDiff = 0;
-	} else {
-		hueDiff = Math.abs(color1[0] - color2[0]);
-		if (hueDiff > 0.5) {
-			hueDiff = 1 - hueDiff;
-		}
-	}
-	const saturationDiff = Math.abs(color1[1] - color2[1]);
-	const intensityDiff = Math.abs(color1[2] - color2[2]);
-	return [hueDiff, saturationDiff, intensityDiff];
-}
-
-canvas.addEventListener('contextmenu', function (event) {
-	event.preventDefault();
-});
-
-document.getElementById('hue-threshold').addEventListener('input', function (event) {
-	const value = parseFloat(this.value) / 1530;
-	if (display === Display.BACKGROUND_SUBTRACTION) {
-		bgHueThreshold = value;
-	} else {
-		fgHueThreshold = value;
-	}
-});
-
-document.getElementById('saturation-threshold').addEventListener('input', function (event) {
-	const value = parseFloat(this.value) / 255;
-	if (display === Display.BACKGROUND_SUBTRACTION) {
-		bgSaturationThreshold = value;
-	} else {
-		fgSaturationThreshold = value;
-	}
-});
-
-document.getElementById('intensity-threshold').addEventListener('input', function (event) {
-	const value = parseFloat(this.value) / 765;
-	if (display === Display.BACKGROUND_SUBTRACTION) {
-		bgIntensityThreshold = value;
-	} else {
-		fgIntensityThreshold = value;
-	}
-});
 
 document.getElementById('blob-distance').addEventListener('input', function (event) {
 	const value = parseInt(this.value);
@@ -745,94 +630,35 @@ document.getElementById('blob-max-ttl').addEventListener('input', function (even
 	}
 });
 
-document.getElementById('motion-threshold').addEventListener('input', function (event) {
-	let value = parseInt(this.value);
-	if (value > 0 && value <= 255) {
-		motionThreshold = value;
-	}
-});
-
 const displayControlIDs = [];
 displayControlIDs[Display.CAMERA] = 'camera-controls';
-displayControlIDs[Display.BACKGROUND_SUBTRACTION] = 'color-match-controls';
-displayControlIDs[Display.COLOR_KEY] = 'color-match-controls';
-displayControlIDs[Display.BLOBS] = 'blob-controls';
 displayControlIDs[Display.MOTION_TRACKER] = 'motion-track-controls';
-const allControlSections = ['camera-controls', 'color-match-controls', 'blob-controls', 'motion-track-controls'];
+displayControlIDs[Display.BLOBS] = 'blob-controls';
+const allControlSections = ['camera-controls', 'motion-track-controls', 'blob-controls'];
 
-function setDisplay() {
-	display = parseInt(displaySelector.value);
-	switch (display) {
-	case Display.COLOR_KEY:
-	case Display.BLOBS:
-		lastDisplay = display;
-		break;
-	case Display.MOTION_TRACKER:
-		if (displayData === undefined) {
-			displayData = new ImageData(width, height);
-		} else {
-			displayData.data.fill(0);
-		}
-		break;
-	}
-
-	const bgSubtractEnable = document.getElementById('subtract-background');
-	if (display === Display.BACKGROUND_SUBTRACTION) {
-		document.getElementById('hue-threshold').value = bgHueThreshold * 1530;
-		document.getElementById('saturation-threshold').value = bgSaturationThreshold * 255;
-		document.getElementById('intensity-threshold').value = bgIntensityThreshold * 765;
-		document.getElementById('subtract-background-controls').hidden = true;
-		subtractBackground = true;
-	} else {
-		document.getElementById('hue-threshold').value = fgHueThreshold * 1530;
-		document.getElementById('saturation-threshold').value = fgSaturationThreshold * 255;
-		document.getElementById('intensity-threshold').value = fgIntensityThreshold * 765;
-		document.getElementById('subtract-background-controls').hidden = false;
-		subtractBackground = bgSubtractEnable.checked;
-	}
-
+document.getElementById('camera-display').addEventListener('input', function (event) {
+	display = parseInt(this.value);
 	const controlSection = displayControlIDs[display];
 	for (let id of allControlSections) {
 		document.getElementById(id).hidden = id !== controlSection;
 	}
-}
+});
 
-displaySelector.addEventListener('input', setDisplay);
 
 document.getElementById('camera-activation').addEventListener('click', async function (event) {
-	if (display === Display.STOPPED) {
-		await startCam();
-	} else {
+	if (displayEnabled) {
 		stopCam();
+	} else {
+		await startCam();
 	}
 });
 
-function setKeyColor(hexColor) {
-	keyColor = hexColor;
-	keyColorComponents[0] = parseInt(hexColor.substr(1, 2), 16);
-	keyColorComponents[1] = parseInt(hexColor.substr(3, 2), 16);
-	keyColorComponents[2] = parseInt(hexColor.substr(5, 2), 16);
-	context.fillStyle = hexColor;
-	context.strokeStyle = hexColor;
-}
-
-document.getElementById('color-keying').addEventListener('input', function (event) {
-	setKeyColor(this.value);
-});
-
-document.getElementById('subtract-background').addEventListener('input', function (event) {
-	subtractBackground = this.checked;
+document.getElementById('camera-bg-capture').addEventListener('click', function (event) {
+	capturingBackground = true;
 });
 
 window.addEventListener('blur', function (event) {
 	if (videoTrack) {
 		stopCam();
-	}
-});
-
-document.body.addEventListener('keydown', function (event) {
-	if (event.key === ' ') {
-		event.preventDefault();
-		setTimeout(captureBackground, 3000);
 	}
 });
