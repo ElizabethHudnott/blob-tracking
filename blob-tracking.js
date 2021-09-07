@@ -148,21 +148,23 @@ class BlobShape {
 		}
 		const numRows = leftPoints.length;
 		const numRows2 = leftPoints2.length;
+		let intersectingPoints = 0;
 		do {
 			const left = leftPoints[j];
 			const left2 = leftPoints2[j2];
-			const minLeft = Math.min(left, left2);
 			const right = rightPoints[j];
 			const right2 = rightPoints2[j2];
-			const maxRight = Math.max(right, right2);
-			if (
-				(right >= left2 && left <= right2) ||
-				(right2 >= left && left2 <= right)
-			) {
+			if (right >= left2 && left <= right2) {
 				canMerge = true;
+				newLeft.push(left);
+				newRight.push(right2);
+				intersectingPoints += right - left2;
+			} else if (right2 >= left && left2 <= right) {
+				canMerge = true;
+				newLeft.push(left2);
+				newRight.push(right);
+				intersectingPoints += right2 - left;
 			}
-			newLeft.push(minLeft);
-			newRight.push(maxRight);
 			j++;
 			j2++;
 		} while (j < numRows && j2 <numRows2);
@@ -174,6 +176,7 @@ class BlobShape {
 			this.top = Math.min(this.top, blob2.top);
 			this.leftBoundary = newLeft;
 			this.rightBoundary = newRight;
+			this.numPoints += blob2.numPoints - intersectingPoints;
 			return true;
 		}
 		return false;
