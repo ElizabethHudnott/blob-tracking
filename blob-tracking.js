@@ -1,8 +1,5 @@
 'use strict';
 
-const TWO_PI = 2 * Math.PI;
-const POINT_SIZE = 7;
-
 const video = document.getElementById('webcam');
 const canvas = document.getElementById('camera-canvas');
 const context = canvas.getContext('2d');
