@@ -657,6 +657,13 @@ document.getElementById('camera-bg-capture').addEventListener('click', function 
 	capturingBackground = true;
 });
 
+document.getElementById('motion-threshold').addEventListener('input', function (event) {
+	const value = parseInt(this.value);
+	if (value > 0) {
+		motionThreshold = value;
+	}
+});
+
 window.addEventListener('blur', function (event) {
 	if (videoTrack) {
 		stopCam();
