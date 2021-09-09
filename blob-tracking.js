@@ -22,7 +22,7 @@ let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
 let maxTTL = parseInt(document.getElementById('blob-max-ttl').value);
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let videoTrack, width, height, bytesPerRow, numBytes, updatePeriod, animID;
-let displayData, previousPixels, backgroundPixels, keyColor;
+let displayData, tempData, previousPixels, backgroundPixels, keyColor;
 let keyColorComponents = [0, 0, 0];
 let previousBlobs = [];
 
@@ -303,7 +303,7 @@ function showWebcam(time) {
 				displayPixels[i + 1] = keyColorComponents[1];
 				displayPixels[i + 2] = keyColorComponents[2];
 			}
-		} else if (colorMatch) {
+		} else if (colorMatch && display === Display.BLOBS) {
 			const y = Math.trunc(i / bytesPerRow);
 			const x = (i % bytesPerRow) / 4;
 			let matched = false;
@@ -324,18 +324,19 @@ function showWebcam(time) {
 				displayPixels[i + 1] = keyColorComponents[1];
 				displayPixels[i + 2] = keyColorComponents[2];
 			}
-		}
-
-		if (display === Display.MOTION_TRACKER) {
+		} else if (display === Display.MOTION_TRACKER) {
 			displayPixels[i + 3] = motionMatch ? 0 : 255;	// Set alpha
 		}
 
 		previousPixels[i / 4] = hsi[2] * 255;
 	}
 
-	context.putImageData(displayData, 0, 0);
+	if (display === Display.MOTION_TRACKER) {
 
-	if (display === Display.BLOBS) {
+		dialate();
+		context.putImageData(displayData, 0, 0);
+
+	} else if (display === Display.BLOBS) {
 		for (let blob of blobs) {
 			blob.finalizeRow();
 		}
@@ -546,6 +547,8 @@ async function startCam() {
 		if (backgroundPixels === undefined || backgroundPixels.length !== numBytes) {
 			backgroundPixels = new Uint8ClampedArray(numBytes);
 		}
+		displayData = new ImageData(width, height);
+		tempData = new ImageData(width, height);
 		animID = requestAnimationFrame(showWebcam);
 		display = parseInt(displaySelector.value);
 		button.innerHTML = 'Stop';
@@ -558,7 +561,6 @@ async function startCam() {
 		context.textBaseline = 'middle';
 		setKeyColor(document.getElementById('color-keying').value);
 
-		// TODO if width or height have changed and motion is displayed then reallocate displayData.
 	}  catch(error) {
 		console.error(error);
 	} finally {
@@ -575,6 +577,43 @@ function stopCam() {
 	video.srcObject = null;
 	display = Display.STOPPED;
 	document.getElementById('camera-activation').innerHTML = 'Start';
+}
+
+function dialate() {
+	const displayPixels = displayData.data;
+	const tempPixels = tempData.data;
+	let offset = bytesPerRow + 3;
+	for (let y = 1; y < height - 1; y++) {
+		for (let x = 0; x < width; x++) {
+			const aboveOffset = offset - bytesPerRow;
+			const belowOffset = offset + bytesPerRow;
+
+			const here = displayPixels[offset];
+			const above = displayPixels[aboveOffset];
+			const below = displayPixels[belowOffset];
+
+			let left = 0, aboveLeft = 0, belowLeft = 0;
+			if (x > 0) {
+				left = displayPixels[offset - 4];
+				aboveLeft = displayPixels[aboveOffset - 4];
+				belowLeft = displayPixels[belowOffset - 4];
+			}
+
+			let right = 0, aboveRight = 0, belowRight = 0;
+			if (x < width - 1) {
+				right = displayPixels[offset + 4];
+				aboveRight = displayPixels[aboveOffset + 4];
+				belowRight = displayPixels[belowOffset + 4];
+			}
+
+			const value = Math.min(here, above, below, left, aboveLeft, belowLeft, right, aboveRight, belowRight);
+			tempPixels[offset] = value;
+			offset += 4;
+		}
+	}
+	const copy = displayData;
+	displayData = tempData;
+	tempData = copy;
 }
 
 function setCameraControl(name) {
@@ -765,9 +804,7 @@ function setDisplay() {
 		lastDisplay = display;
 		break;
 	case Display.MOTION_TRACKER:
-		if (displayData === undefined) {
-			displayData = new ImageData(width, height);
-		} else {
+		if (displayData !== undefined) {
 			displayData.data.fill(0);
 		}
 		break;
