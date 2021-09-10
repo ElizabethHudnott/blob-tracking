@@ -360,16 +360,17 @@ function showWebcam(time) {
 				displayPixels[i + 2] = keyColorComponents[2];
 			}
 
-		} else if (colorMatch) {
+		} else if (display === Display.COLOR_KEY) {
 
-			if (display === Display.COLOR_KEY) {
+				if (colorMatch) {
+					displayPixels[i] = keyColorComponents[0];
+					displayPixels[i + 1] = keyColorComponents[1];
+					displayPixels[i + 2] = keyColorComponents[2];
+				}
 
-				displayPixels[i] = keyColorComponents[0];
-				displayPixels[i + 1] = keyColorComponents[1];
-				displayPixels[i + 2] = keyColorComponents[2];
+		} else if (display === Display.BLOBS) {
 
-			} else if (display === Display.BLOBS) {
-
+			if (colorMatch) {
 				const y = Math.trunc(i / bytesPerRow);
 				const x = (i % bytesPerRow) / 4;
 				let matched = false;
@@ -385,15 +386,15 @@ function showWebcam(time) {
 				if (!matched) {
 					blobs.push(new BlobShape(x, y));
 				}
-
 			}
+
 		}
 
 		previousPixels[i / 4] = hsi[2] * 255;
 	}
 
 	if (display === Display.MOTION_TRACKER) {
-		dialate();
+		dilate();
 	}
 
 	context.putImageData(displayData, 0, 0);
@@ -641,7 +642,7 @@ function stopCam() {
 	document.getElementById('camera-activation').innerHTML = 'Start';
 }
 
-function dialate() {
+function dilate() {
 	const displayPixels = displayData.data;
 	const newPixels = motionDataSwap.data;
 	let offset = bytesPerRow + 3;
