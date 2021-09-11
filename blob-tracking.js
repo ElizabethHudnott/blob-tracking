@@ -1,5 +1,7 @@
 'use strict';
 
+const TWO_PI = 2 * Math.PI;
+
 const video = document.getElementById('webcam');
 const canvas = document.getElementById('camera-canvas');
 const context = canvas.getContext('2d');
@@ -11,19 +13,19 @@ const displaySelector = document.getElementById('camera-display');
 let targetColor = [0, 0, 0];
 let sampleSize = 1;
 let lastUpdate = 0;
-let numBackgroundFrames = 50;
+let numBackgroundFrames = 51;
 let subtractBackground = document.getElementById('subtract-background').checked;
-let fgHueThreshold = parseFloat(document.getElementById('hue-threshold').value) / 1530;
-let fgSaturationThreshold = parseFloat(document.getElementById('saturation-threshold').value) / 255;
-let fgIntensityThreshold = parseFloat(document.getElementById('intensity-threshold').value) / 765;
-let bgHueThreshold = 0.5, bgSaturationThreshold = 1, bgIntensityThreshold = 1;
+let fgHueThreshold = parseInt(document.getElementById('hue-threshold').value);
+let fgSaturationThreshold = parseInt(document.getElementById('saturation-threshold').value);
+let fgIntensityThreshold = parseInt(document.getElementById('intensity-threshold').value);
+let bgHueThreshold = 65535, bgSaturationThreshold = 65535, bgIntensityThreshold = 765;
 let blobDistanceX = parseInt(document.getElementById('blob-distance').value);
 let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percent').value) / 100;
 let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
 let maxTTL = parseInt(document.getElementById('blob-max-ttl').value);
 let motionThreshold = parseFloat(document.getElementById('motion-threshold').value);
 let videoTrack, width, height, bytesPerRow, numBytes, updatePeriod, animID;
-let displayData, motionDataSwap, previousPixels, backgroundPixels, backgroundFrames = [], keyColor;
+let displayData, motionDataSwap, hsiaPixels, previousPixels, backgroundPixels, backgroundFrames = [], keyColor;
 let capturingBackground = false;
 let keyColorComponents = [0, 0, 0];
 let previousBlobs = [];
@@ -271,18 +273,18 @@ function showWebcam(time) {
 	const imageData = offscreenContext.getImageData(0, 0, width, height);
 	const pixels = imageData.data;
 
+	for (let i = 0; i < numBytes; i += 4) {
+		const red = pixels[i];
+		const green = pixels[i + 1];
+		const blue = pixels[i + 2];
+		const hsi = rgbToHSI(red, green, blue);
+		hsiaPixels[i] = hsi[0];
+		hsiaPixels[i + 1] = hsi[1];
+		hsiaPixels[i + 2] = hsi[2];
+	}
+
 	if (capturingBackground) {
-		const frameHSI = new Uint8ClampedArray(numBytes);
-		for (let i = 0; i < numBytes; i += 4) {
-			const red = pixels[i];
-			const green = pixels[i + 1];
-			const blue = pixels[i + 2];
-			const hsi = rgbToHSI(red, green, blue);
-			frameHSI[i] = Math.abs(hsi[0] - 0.5) * 255;
-			frameHSI[i + 1] = hsi[1] * 255;
-			frameHSI[i + 2] = hsi[2] * 255;
-		}
-		backgroundFrames.push(frameHSI);
+		backgroundFrames.push(hsiaPixels.slice());
 
 		if (backgroundFrames.length < numBackgroundFrames) {
 			return;
@@ -290,32 +292,38 @@ function showWebcam(time) {
 
 		bell.play();
 		const midIndex = Math.trunc((numBackgroundFrames - 1) * 0.5);
-		const values = new Uint8ClampedArray(numBackgroundFrames);
-
-		for (let i = 0; i < numBytes; i++) {
-			if (i % 4 === 3) {
-				continue;
-			}
-			for (let j = 0; j < numBackgroundFrames; j++) {
-				values[j] = backgroundFrames[j][i];
-			}
-			values.sort();
-			backgroundPixels[i] = values[midIndex];
-		}
+		const circleFraction = Math.PI / 32768;
+		const saturationValues = new Uint16Array(numBackgroundFrames);
+		const intensityValues = new Uint16Array(numBackgroundFrames);
+		let totalHueX = 0, totalHueY = 0;
 
 		for (let i = 0; i < numBytes; i += 4) {
-			const red = pixels[i];
-			const green = pixels[i + 1];
-			const blue = pixels[i + 2];
-			const hsi = rgbToHSI(red, green, blue);
-			const hueDeviation = backgroundPixels[i];
-			let hue = hsi[0] * 255;
-			hue = Math.max(Math.min(hue, 128 + hueDeviation), 128 - hueDeviation);
+			for (let j = 0; j < numBackgroundFrames; j++) {
+				saturationValues[j] = backgroundFrames[j][i + 1];
+				intensityValues[j] = backgroundFrames[j][i + 2];
+				const hue = backgroundFrames[j][i];
+				totalHueX += Math.cos(circleFraction * hue);
+				totalHueY += Math.sin(circleFraction * hue);
+			}
+			saturationValues.sort();
+			backgroundPixels[i + 1] = saturationValues[midIndex];
+			intensityValues.sort();
+			backgroundPixels[i + 2] = intensityValues[midIndex];
+			let hue;
+			if (totalHueX === 0 && totalHueY === 0) {
+				hue = hsiaPixels[i];
+			} else {
+				let angle = Math.atan2(totalHueY, totalHueX);
+				if (angle < 0) {
+					angle += TWO_PI;
+				}
+				hue = angle / circleFraction;
+			}
 			backgroundPixels[i] = hue;
 		}
+
 		capturingBackground = false;
 		backgroundFrames = [];
-		return;
 	}
 
 	context.setTransform(-1, 0, 0, 1, width, 0);
@@ -331,22 +339,21 @@ function showWebcam(time) {
 	const blobs = [];
 
 	for (let i = 0; i < numBytes; i += 4) {
-		let red = pixels[i];
-		let green = pixels[i + 1];
-		let blue = pixels[i + 2];
-		let hsi = rgbToHSI(red, green, blue);
-		let colorVector = colorDifference(hsi, targetColor);
+		const hue = hsiaPixels[i];
+		const saturation = hsiaPixels[i + 1];
+		const intensity = hsiaPixels[i + 2];
+		let colorVector = colorDifference(hue, saturation, intensity, targetColor);
 		const colorMatch = colorVector[0] <= fgHueThreshold && colorVector[1] <= fgSaturationThreshold && colorVector[2] <= fgIntensityThreshold;
 
 		let backgroundMatch = false;
 		if (subtractBackground) {
-			const backgroundColor = [backgroundPixels[i] / 255, backgroundPixels[i + 1] / 255, backgroundPixels[i + 2] / 255];
-			colorVector = colorDifference(hsi, backgroundColor);
+			const backgroundColor = [ backgroundPixels[i], backgroundPixels[i + 1], backgroundPixels[i + 2] ];
+			colorVector = colorDifference(hue, saturation, intensity, backgroundColor);
 			backgroundMatch = colorVector[0] <= bgHueThreshold && colorVector[1] <= bgSaturationThreshold && colorVector[2] <= bgIntensityThreshold;;
 		}
 
 		const previousIntensity = previousPixels[i / 4];
-		const motionMatch = Math.abs(hsi[2] * 255 - previousIntensity) >= motionThreshold;
+		const motionMatch = Math.abs(intensity - previousIntensity) >= motionThreshold;
 
 		if (display === Display.MOTION_TRACKER) {
 
@@ -390,7 +397,7 @@ function showWebcam(time) {
 
 		}
 
-		previousPixels[i / 4] = hsi[2] * 255;
+		previousPixels[i / 4] = intensity;
 	}
 
 	if (display === Display.MOTION_TRACKER) {
@@ -524,7 +531,7 @@ function showWebcam(time) {
 }
 
 async function startCam() {
-	const button = document.getElementById('camera-activation');
+	const button = document.getElementById('btn-activate-camera');
 	button.disabled = true;
 	try {
 		const stream = await navigator.mediaDevices.getUserMedia({
@@ -606,12 +613,13 @@ async function startCam() {
 		offscreenCanvas.width = width;
 		offscreenCanvas.height = height;
 		offscreenContext.setTransform(-1, 0, 0, 1, width, 0);
-		previousPixels = new Uint8ClampedArray(width * height);
 		if (backgroundPixels === undefined || backgroundPixels.length !== numBytes) {
-			backgroundPixels = new Uint8ClampedArray(numBytes);
+			displayData = new ImageData(width, height);
+			motionDataSwap = new ImageData(width, height);
+			hsiaPixels = new Uint16Array(numBytes);
+			previousPixels = new Uint16Array(width * height);
+			backgroundPixels = new Uint16Array(numBytes);
 		}
-		displayData = new ImageData(width, height);
-		motionDataSwap = new ImageData(width, height);
 		animID = requestAnimationFrame(showWebcam);
 		display = parseInt(displaySelector.value);
 		button.innerHTML = 'Stop';
@@ -639,7 +647,7 @@ function stopCam() {
 	videoTrack.stop();
 	video.srcObject = null;
 	display = Display.STOPPED;
-	document.getElementById('camera-activation').innerHTML = 'Start';
+	document.getElementById('btn-activate-camera').innerHTML = 'Start';
 }
 
 function dilate() {
@@ -735,10 +743,13 @@ canvas.addEventListener('pointerdown', function (event) {
 	targetColor = rgbToHSI(red, green, blue);
 });
 
+/**
+ * Ranges:
+ * hue: 0..65535
+ * saturation 0..65535
+ * intensity 0..765
+ */
 function rgbToHSI(red, green, blue) {
-	red /= 255;
-	green /= 255;
-	blue /= 255;
 	const max = Math.max(red, green, blue);
 	const min = Math.min(red, green, blue);
 	const delta = max - min;
@@ -755,28 +766,28 @@ function rgbToHSI(red, green, blue) {
 	if (hue < 0) {
 		hue += 6;
 	}
-	hue /= 6;
-	const intensity = (red + green + blue) / 3;
+	hue *= 65536 / 6;
+	const intensity = red + green + blue;
 	if (intensity === 0) {
 		saturation = 0;
 	} else {
-		saturation = 1 - min / intensity;
+		saturation = (1 - (3 * min) / intensity) * 65535;
 	}
 	return [hue, saturation, intensity];
 }
 
-function colorDifference(color1, color2) {
+function colorDifference(hue1, saturation1, intensity1, color2) {
 	let hueDiff;
-	if (color1[1] === 0 || color2[1] === 0) {
+	if (saturation1 === 0 || color2[1] === 0) {
 		hueDiff = 0;
 	} else {
-		hueDiff = Math.abs(color1[0] - color2[0]);
-		if (hueDiff > 0.5) {
-			hueDiff = 1 - hueDiff;
+		hueDiff = Math.abs(hue1 - color2[0]);
+		if (hueDiff > 32768) {
+			hueDiff = 65536 - hueDiff;
 		}
 	}
-	const saturationDiff = Math.abs(color1[1] - color2[1]);
-	const intensityDiff = Math.abs(color1[2] - color2[2]);
+	const saturationDiff = Math.abs(saturation1 - color2[1]);
+	const intensityDiff = Math.abs(intensity1 - color2[2]);
 	return [hueDiff, saturationDiff, intensityDiff];
 }
 
@@ -785,7 +796,7 @@ canvas.addEventListener('contextmenu', function (event) {
 });
 
 document.getElementById('hue-threshold').addEventListener('input', function (event) {
-	const value = parseFloat(this.value) / 1530;
+	const value = parseInt(this.value);
 	if (display === Display.BACKGROUND_SUBTRACTION) {
 		bgHueThreshold = value;
 	} else {
@@ -794,7 +805,7 @@ document.getElementById('hue-threshold').addEventListener('input', function (eve
 });
 
 document.getElementById('saturation-threshold').addEventListener('input', function (event) {
-	const value = parseFloat(this.value) / 255;
+	const value = parseInt(this.value);
 	if (display === Display.BACKGROUND_SUBTRACTION) {
 		bgSaturationThreshold = value;
 	} else {
@@ -803,7 +814,7 @@ document.getElementById('saturation-threshold').addEventListener('input', functi
 });
 
 document.getElementById('intensity-threshold').addEventListener('input', function (event) {
-	const value = parseFloat(this.value) / 765;
+	const value = parseInt(this.value);
 	if (display === Display.BACKGROUND_SUBTRACTION) {
 		bgIntensityThreshold = value;
 	} else {
@@ -841,7 +852,7 @@ document.getElementById('blob-max-ttl').addEventListener('input', function (even
 
 document.getElementById('motion-threshold').addEventListener('input', function (event) {
 	let value = parseInt(this.value);
-	if (value > 0 && value <= 255) {
+	if (value > 0 && value <= 755) {
 		motionThreshold = value;
 	}
 });
@@ -870,15 +881,15 @@ function setDisplay() {
 
 	const bgSubtractEnable = document.getElementById('subtract-background');
 	if (display === Display.BACKGROUND_SUBTRACTION) {
-		document.getElementById('hue-threshold').value = bgHueThreshold * 1530;
-		document.getElementById('saturation-threshold').value = bgSaturationThreshold * 255;
-		document.getElementById('intensity-threshold').value = bgIntensityThreshold * 765;
+		document.getElementById('hue-threshold').value = bgHueThreshold;
+		document.getElementById('saturation-threshold').value = bgSaturationThreshold;
+		document.getElementById('intensity-threshold').value = bgIntensityThreshold;
 		document.getElementById('subtract-background-controls').hidden = true;
 		subtractBackground = true;
 	} else {
-		document.getElementById('hue-threshold').value = fgHueThreshold * 1530;
-		document.getElementById('saturation-threshold').value = fgSaturationThreshold * 255;
-		document.getElementById('intensity-threshold').value = fgIntensityThreshold * 765;
+		document.getElementById('hue-threshold').value = fgHueThreshold;
+		document.getElementById('saturation-threshold').value = fgSaturationThreshold;
+		document.getElementById('intensity-threshold').value = fgIntensityThreshold;
 		document.getElementById('subtract-background-controls').hidden = false;
 		subtractBackground = bgSubtractEnable.checked;
 	}
@@ -891,7 +902,7 @@ function setDisplay() {
 
 displaySelector.addEventListener('input', setDisplay);
 
-document.getElementById('camera-activation').addEventListener('click', async function (event) {
+document.getElementById('btn-activate-camera').addEventListener('click', async function (event) {
 	if (display === Display.STOPPED) {
 		await startCam();
 	} else {
@@ -924,7 +935,13 @@ window.addEventListener('blur', function (event) {
 
 function startCapturingBackground() {
 	capturingBackground = true;
+	context.setTransform(1, 0, 0, 1, 0, 0);
+	context.fillText('Computing...', width / 2, height / 2);
 }
+
+document.getElementById('btn-capture-background').addEventListener('click', function (event) {
+		setTimeout(startCapturingBackground, 3000);
+});
 
 document.body.addEventListener('keydown', function (event) {
 	if (event.key === ' ') {

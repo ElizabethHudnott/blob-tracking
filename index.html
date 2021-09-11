@@ -28,7 +28,12 @@
 				</select>
 			</div>
 			<div class="col-auto">
-				<button type="button" id="camera-activation" class="btn btn-primary">Start</button>
+				<button type="button" id="btn-activate-camera" class="btn btn-primary">
+					Start
+				</button>
+				<button type="button" id="btn-capture-background" class="btn btn-secondary">
+					Capture Background
+				</button>
 			</div>
 		</div>
 
@@ -103,13 +108,13 @@
 			<div class="form-row form-group">
 				<div class="col-3">Hue</div>
 				<div class="col-9">
-					<input type="range" min="0" max="765" value="382" id="hue-threshold" class="form-control-range">
+					<input type="range" min="0" max="32768" value="16384" id="hue-threshold" class="form-control-range">
 				</div>
 			</div>
 			<div class="form-row form-group">
 				<div class="col-3">Saturation</div>
 				<div class="col-9">
-					<input type="range" min="0" max="255" value="128" id="saturation-threshold" class="form-control-range">
+					<input type="range" min="0" max="65535" value="32767" id="saturation-threshold" class="form-control-range">
 				</div>
 			</div>
 			<div class="form-row form-group">
