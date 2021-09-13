@@ -19,7 +19,8 @@ let fgHueThreshold = parseInt(document.getElementById('hue-threshold').value);
 let fgSaturationThreshold = parseInt(document.getElementById('saturation-threshold').value);
 let fgIntensityThreshold = parseInt(document.getElementById('intensity-threshold').value);
 let bgHueThreshold = 65535, bgSaturationThreshold = 65535, bgIntensityThreshold = 765;
-let blobDistanceX = parseInt(document.getElementById('blob-distance').value);
+let blobDistanceX = parseInt(document.getElementById('blob-distance-x').value);
+let blobDistanceY = parseInt(document.getElementById('blob-distance-y').value);
 let boundaryFraction = parseFloat(document.getElementById('blob-boundary-percent').value) / 100;
 let minBlobPoints = parseInt(document.getElementById('min-blob-points').value);
 let maxTTL = parseInt(document.getElementById('blob-max-ttl').value);
@@ -56,6 +57,7 @@ class BlobShape {
 		this.leftBoundary = [];
 		this.rightBoundary = [];
 		this.numPoints = 0;
+		this.hasMerged = false;
 		this.hull = undefined;
 		this.centreX = 0;
 		this.centreY = 0;
@@ -81,19 +83,36 @@ class BlobShape {
 	add(x, y) {
 		if (y === this.top) {
 			this.right = x;
+
 		} else if (y > this.bottom) {
+
 			this.finalizeRow();
+			const lastRowNum = this.leftBoundary.length - 1;
+			const prevLeft = this.leftBoundary[lastRowNum];
+			const prevRight = this.rightBoundary[lastRowNum]
+			const gradient = (x - prevLeft) / (y - this.bottom);
+			this.bottom++;
+			let intermediateX = prevLeft;
+			while (y !== this.bottom) {
+				intermediateX += gradient;
+				this.leftBoundary.push(intermediateX);
+				this.rightBoundary.push(prevRight);
+				this.bottom++;
+			}
 			this.left = x;
-			this.bottom = y;
+
+		} else if (x >= this.right) {
+			this.right++;
 		}
+
 		this.xCoordsOnRow.push(x);
 	}
 
 	finalizeRow() {
 		const coordsOnRow = this.xCoordsOnRow;
 		const numCoords = coordsOnRow.length;
-		const lb = Math.trunc((numCoords - 1) * (1 - boundaryFraction));
-		const ub = Math.trunc((numCoords - 1) * boundaryFraction);
+		const lb = Math.round((numCoords - 1) * (1 - boundaryFraction));
+		const ub = Math.round((numCoords - 1) * boundaryFraction);
 		this.numPoints += ub - lb + 1;
 		const left = coordsOnRow[lb];
 		const right = coordsOnRow[ub];
@@ -128,13 +147,30 @@ class BlobShape {
 	}
 
 	merge(blob2) {
-		let canMerge = false;
-		let j = blob2.top - this.top;
-		let j2 = 0;
 		const leftPoints = this.leftBoundary;
 		const rightPoints = this.rightBoundary;
 		const leftPoints2 = blob2.leftBoundary;
 		const rightPoints2 = blob2.rightBoundary;
+		const numRows = leftPoints.length;
+		const numRows2 = leftPoints2.length;
+
+		let canMerge = false;
+		if (this.bottom === blob2.top - 1) {
+			const left = this.leftBoundary[numRows - 1];
+			const right = this.rightBoundary[numRows - 1];
+			const left2 = blob2.leftBoundary[0];
+			const right2 = blob2.rightBoundary[0];
+			canMerge = right >= left2 && right2 >= left;
+		} else if (blob2.bottom === this.top - 1) {
+			const left = blob2.leftBoundary[numRows2 - 1];
+			const right = blob2.rightBoundary[numRows2 - 1];
+			const left2 = this.leftBoundary[0];
+			const right2 = this.rightBoundary[0];
+			canMerge = right >= left2 && right2 >= left;
+		}
+
+		let j = blob2.top - this.top;
+		let j2 = 0;
 		let newLeft, newRight;
 		if (j >= 0) {
 			// blob2 is lower than this blob
@@ -147,24 +183,36 @@ class BlobShape {
 			newLeft = leftPoints2.slice(0, j2);
 			newRight = rightPoints2.slice(0, j2);
 		}
-		const numRows = leftPoints.length;
-		const numRows2 = leftPoints2.length;
 		let intersectingPoints = 0;
 		do {
 			const left = leftPoints[j];
 			const left2 = leftPoints2[j2];
 			const right = rightPoints[j];
 			const right2 = rightPoints2[j2];
-			if (right >= left2 && left <= right2) {
+			if (right >= left2 && left <= left2) {
+				// Blob 1 to the left of Blob 2
 				canMerge = true;
 				newLeft.push(left);
 				newRight.push(right2);
 				intersectingPoints += right - left2;
-			} else if (right2 >= left && left2 <= right) {
+			} else if (right2 >= left && left2 <= left) {
+				// Blob 2 to the left of Blob 1
 				canMerge = true;
 				newLeft.push(left2);
 				newRight.push(right);
 				intersectingPoints += right2 - left;
+			} else if (left <= left2 && right >= right2) {
+				// Blob 1 contains Blob 2
+				canMerge = true;
+				newLeft.push(left);
+				newRight.push(right);
+				intersectingPoints += right2 - left2;
+			} else if (left2 <= left && right2 >= right) {
+				// Blob 2 contains Blob 1
+				canMerge = true;
+				newLeft.push(left2);
+				newRight.push(right2);
+				intersectingPoints += right - left;
 			}
 			j++;
 			j2++;
@@ -178,6 +226,7 @@ class BlobShape {
 			this.leftBoundary = newLeft;
 			this.rightBoundary = newRight;
 			this.numPoints += blob2.numPoints - intersectingPoints;
+			this.hasMerged = true;
 			return true;
 		}
 		return false;
@@ -221,8 +270,9 @@ class BlobShape {
 		while (BlobShape.activeIDs.has(id)) {
 			id++;
 		}
-		if (id < 3 && this.maxRight >= width * 0.67) {
-			while (id < 3 || BlobShape.activeIDs.has(id)) {
+		if (id < 2 && this.maxRight >= width * 0.66) {
+			// Reserve ID 1 for the left hand.
+			while (id < 2 || BlobShape.activeIDs.has(id)) {
 				id++;
 			}
 		} else {
@@ -385,7 +435,10 @@ function showWebcam(time) {
 					const blob = blobs[j];
 					const dx = blob.distanceX(x);
 					const dy = blob.distanceY(y);
-					if (dx <= blobDistanceX && dy <= 1) {
+					if (dx <= blobDistanceX && (
+						dy <= 1 ||
+						(dy <= blobDistanceY && dx <= y - blob.bottom)
+					)) {
 						blobs[j].add(x, y);
 						matched = true;
 					}
@@ -429,17 +482,18 @@ function showWebcam(time) {
 				}
 				i++;
 			}
+			i = 0;
+			while (i < blobs.length) {
+				const blob = blobs[i];
+				if (blob.hasMerged || blob.numPoints >= minBlobPoints) {
+					i++;
+					blob.hasMerged = false;
+				} else {
+					blobs.splice(i, 1);
+				}
+			}
 		} while (found);
 
-		let i = 0;
-		while (i < blobs.length) {
-			const blob = blobs[i];
-			if (blob.numPoints >= minBlobPoints) {
-				i++;
-			} else {
-				blobs.splice(i, 1);
-			}
-		}
 		context.beginPath();
 		for (let blob of blobs) {
 			blob.computeCentre();
@@ -822,10 +876,17 @@ document.getElementById('intensity-threshold').addEventListener('input', functio
 	}
 });
 
-document.getElementById('blob-distance').addEventListener('input', function (event) {
+document.getElementById('blob-distance-x').addEventListener('input', function (event) {
 	const value = parseInt(this.value);
 	if (value > 0) {
 		blobDistanceX = value;
+	}
+});
+
+document.getElementById('blob-distance-y').addEventListener('input', function (event) {
+	const value = parseInt(this.value);
+	if (value > 0) {
+		blobDistanceY = value;
 	}
 });
 

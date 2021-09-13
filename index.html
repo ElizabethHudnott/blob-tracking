@@ -127,27 +127,35 @@
 
 		<div id="blob-controls" hidden>
 			<div class="form-row form-group">
-				<label class="col-3 col-form-label" for="blob-distance">
-					Max Distance to Blob
+				<label class="col-3 col-form-label" for="blob-distance-x">
+					Max Distance X
 				</label>
 				<div class="col-3">
-					<input type="number" min="1" max="100" value="20" id="blob-distance" class="form-control">
+					<input type="number" min="1" max="100" value="20" id="blob-distance-x" class="form-control">
 				</div>
-				<label class="col-3 second-col col-form-label" for="blob-boundary-percent">
+				<label class="col-3 second-col col-form-label" for="blob-distance-y">
+					Max Distance Y
+				</label>
+				<div class="col-3">
+					<input type="number" min="1" max="100" value="5" id="blob-distance-y" class="form-control">
+				</div>
+			</div>
+			<div class="form-row form-group">
+				<label class="col-3 col-form-label" for="blob-boundary-percent">
 					Boundary Percentile
 				</label>
 				<div class="col-3">
 					<input type="number" min="51" max="100" value="90" id="blob-boundary-percent" class="form-control">
 				</div>
-			</div>
-			<div class="form-row form-group">
-				<label class="col-3 col-form-label" for="min-blob-points">
-					Minimum No. of Points
+				<label class="col-3 second-col col-form-label" for="min-blob-points">
+					Min No. of Points
 				</label>
 				<div class="col-3">
 					<input type="number" min="10" max="999950" step="50" value="800" id="min-blob-points" class="form-control">
 				</div>
-				<label class="col-3 col-form-label second-col" for="blob-max-ttl">
+			</div>
+			<div class="form-row form-group">
+				<label class="col-3 col-form-label" for="blob-max-ttl">
 					Max TTL
 				</label>
 				<div class="col-3">
